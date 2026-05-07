@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Reporting v2 — Report Builder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Display:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css" />
+<style>
+  :root {
+    --sage-500: #207460; --sage-700: #155042;
+    --gray-25: #FCFDFC; --gray-50: #F5F7F6; --gray-200: #E0E5E4;
+    --gray-600: #525C59; --gray-900: #161A18;
+  }
+  html, body, #root {
+    margin: 0; padding: 0; height: 100%;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    color: var(--gray-900);
+    background: var(--gray-25);
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  button { font-family: inherit; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb { background: #D5DBDA; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+  *::-webkit-scrollbar-track { background: transparent; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo } = React;
+
+// ─── DESIGN TOKENS ────────────────────────────────────────────
+const SERIES = [
+  "#207460","#4D9A88","#13673E","#7AB5A6",
+  "#D29E00","#B87428","#048AF5","#966EEE","#A8D0C5","#525C59",
+];
+const fmtUSD  = (n) => "$" + Math.round(n).toLocaleString("en-US");
+const fmtUSDk = (n) => Math.abs(n)>=1000 ? "$"+(n/1000).toFixed(n>=10000?0:1)+"k" : "$"+n;
+
+// ─── ATOMS ────────────────────────────────────────────────────
+function Button({ children, variant="primary", size="md", icon, iconRight, onClick, disabled, style }) {
+  const base = {
+    display:"inline-flex", alignItems:"center", gap:6,
+    fontFamily:"Inter, system-ui", fontWeight:500,
+    fontSize: size==="sm" ? 13 : 14,
+    padding: size==="sm" ? "5px 10px" : "8px 14px",
+    borderRadius:8, border:"1px solid transparent",
+    cursor: disabled ? "not-allowed" : "pointer",
+    whiteSpace:"nowrap", transition:"background 120ms",
+    opacity: disabled ? 0.5 : 1,
+  };
+  const variants = {
+    primary:   { background:"#207460", color:"#fff" },
+    secondary: { background:"#fff", color:"#161A18", borderColor:"#E0E5E4" },
+    ghost:     { background:"transparent", color:"#525C59" },
+    danger:    { background:"#E55767", color:"#fff" },
+  };
+  return (
+    <button onClick={!disabled ? onClick : undefined} disabled={disabled}
+      style={{ ...base, ...variants[variant], ...style }}
+      onMouseEnter={(e)=>{
+        if(disabled) return;
+        if(variant==="primary") e.currentTarget.style.background="#155042";
+        if(variant==="secondary") e.currentTarget.style.background="#F5F7F6";
+        if(variant==="ghost"){ e.currentTarget.style.background="#F5F7F6"; e.currentTarget.style.color="#161A18"; }
+      }}
+      onMouseLeave={(e)=>{ if(!disabled) Object.assign(e.currentTarget.style, variants[variant]); }}>
+      {icon && <i className={icon}></i>}
+      {children}
+      {iconRight && <i className={iconRight}></i>}
+    </button>
+  );
+}
+
+function Badge({ children, tone="neutral", dot=false, style }) {
+  const tones = {
+    success: { bg:"#E2F6E6", fg:"#2E744C", border:"#C4EACC" },
+    warning: { bg:"#FEF2E6", fg:"#B87428", border:"#FCE6CF" },
+    danger:  { bg:"#FFEAEB", fg:"#DC455A", border:"#FFE0E1" },
+    info:    { bg:"#E1F3FF", fg:"#007CE9", border:"#D1EDFF" },
+    neutral: { bg:"#EFF2F1", fg:"#313836", border:"#E0E5E4" },
+    brand:   { bg:"#EBF5F2", fg:"#1A6251", border:"#D4E8E2" },
+  };
+  const t = tones[tone]||tones.neutral;
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", gap:4,
+      padding:"3px 8px", borderRadius:6, fontSize:12, fontWeight:500,
+      background:t.bg, color:t.fg, border:`1px solid ${t.border}`,
+      fontFamily:"Inter, system-ui", ...style,
+    }}>
+      {dot && <span style={{ width:6, height:6, borderRadius:999, background:t.fg }}></span>}
+      {children}
+    </span>
+  );
+}
+
+function Avatar({ initials, size=32, tone="sage", status }) {
+  const tones = {
+    sage:{ bg:"#D4E8E2", fg:"#155042" },
+    honey:{ bg:"#FCE6CF", fg:"#7A4C18" },
+    gray:{ bg:"#E0E5E4", fg:"#313836" },
+  };
+  const t = tones[tone]||tones.sage;
+  return (
+    <div style={{ position:"relative", width:size, height:size, flex:`0 0 ${size}px` }}>
+      <div style={{
+        width:size, height:size, borderRadius:999,
+        background:t.bg, color:t.fg,
+        display:"grid", placeItems:"center",
+        fontWeight:500, fontSize:Math.round(size*0.38),
+      }}>{initials}</div>
+      {status && (
+        <span style={{
+          position:"absolute", right:-1, bottom:-1,
+          width:Math.max(8,size*0.28), height:Math.max(8,size*0.28),
+          borderRadius:999, background:"#2E744C", border:"2px solid #fff",
+        }}></span>
+      )}
+    </div>
+  );
+}
+
+function NavItem({ icon, label, active, onClick, hasChevron }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div onClick={onClick}
+      onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+      style={{
+        display:"flex", alignItems:"center", gap:10,
+        height:34, padding:"0 12px", borderRadius:8, cursor:"pointer",
+        background: active?"#E0E5E4":(hover?"#EFF2F1":"transparent"),
+        color: active?"#161A18":(hover?"#161A18":"#525C59"),
+        fontWeight:500, fontSize:14, letterSpacing:"-0.006em",
+        userSelect:"none",
+      }}>
+      <i className={icon} style={{ fontSize:16, color:active?"#1A6251":"#9AA3A1" }}></i>
+      <span style={{ flex:1 }}>{label}</span>
+      {hasChevron && <i className="ri-arrow-right-s-line" style={{ fontSize:16, color:"#9AA3A1" }}></i>}
+    </div>
+  );
+}
+
+function AccountRow({ label, active, dot="#9AA3A1" }) {
+  return (
+    <div style={{ position:"relative" }}>
+      {active && <span style={{ position:"absolute", left:-12, top:4, bottom:4, width:3, borderRadius:"0 3px 3px 0", background:"#207460" }}></span>}
+      <div style={{
+        display:"flex", alignItems:"center", gap:10,
+        height:30, padding:"0 12px", borderRadius:8, cursor:"pointer",
+        fontSize:13, color:"#161A18", fontWeight:active?500:400,
+        background:active?"#E0E5E4":"transparent",
+      }}>
+        <span style={{ width:6, height:6, borderRadius:999, background:active?"#207460":dot }}></span>
+        <span style={{ flex:1 }}>{label}</span>
+        {active && <i className="ri-check-line" style={{ color:"#207460" }}></i>}
+      </div>
+    </div>
+  );
+}
+
+// ─── SIDEBAR ──────────────────────────────────────────────────
+function Sidebar({ activeKey, onNavigate }) {
+  const items = [
+    { key:"dashboard",     icon:"ri-dashboard-line",     label:"Dashboard" },
+    { key:"beneficiaries", icon:"ri-user-3-line",        label:"Beneficiaries" },
+    { key:"cases",         icon:"ri-briefcase-line",     label:"Cases" },
+    { key:"petitioners",   icon:"ri-bank-line",          label:"Petitioners" },
+    { key:"analytics",     icon:"ri-bar-chart-2-line",   label:"Analytics", hasChevron:true },
+    { key:"questionnaires",icon:"ri-questionnaire-line", label:"Questionnaires" },
+    { key:"billing",       icon:"ri-bill-line",          label:"Billing" },
+    { key:"refer",         icon:"ri-user-add-line",      label:"Refer a Friend" },
+  ];
+  return (
+    <aside style={{
+      width:240, height:"100vh",
+      background:"#F5F7F6", borderRight:"1px solid #E0E5E4",
+      display:"flex", flexDirection:"column",
+      flex:"0 0 240px", position:"sticky", top:0,
+    }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"18px 16px 14px" }}>
+        <div style={{ fontFamily:"'Inter Display', Inter", fontWeight:600, fontSize:18, color:"#207460", letterSpacing:"-0.01em" }}>alma</div>
+        <i className="ri-sidebar-fold-line" style={{ color:"#9AA3A1", cursor:"pointer", fontSize:18 }}></i>
+      </div>
+      <div style={{ padding:"0 8px", flex:1, overflowY:"auto" }}>
+        <div style={{ marginTop:8 }}>
+          <div style={{ fontSize:11, textTransform:"uppercase", color:"#9AA3A1", letterSpacing:"0.06em", fontWeight:500, padding:"0 12px 6px" }}>MAIN</div>
+          {items.map(it => (
+            <NavItem key={it.key} icon={it.icon} label={it.label}
+              active={activeKey===it.key}
+              onClick={()=>onNavigate&&onNavigate(it.key)}
+              hasChevron={it.hasChevron&&activeKey===it.key} />
+          ))}
+        </div>
+        <div style={{ marginTop:14 }}>
+          <div style={{ fontSize:11, textTransform:"uppercase", color:"#9AA3A1", letterSpacing:"0.06em", fontWeight:500, padding:"0 12px 6px" }}>FAVORITES</div>
+          <NavItem icon="ri-star-line" label="H-1B Lottery Command Center" />
+        </div>
+        <div style={{ marginTop:14 }}>
+          <div style={{ fontSize:11, textTransform:"uppercase", color:"#9AA3A1", letterSpacing:"0.06em", fontWeight:500, padding:"0 12px 6px" }}>PLATFORM</div>
+          <NavItem icon="ri-settings-3-line" label="Settings" />
+          <NavItem icon="ri-customer-service-2-line" label="Support" />
+        </div>
+      </div>
+      <div style={{ borderTop:"1px solid #E0E5E4", padding:"12px 8px 8px" }}>
+        <div style={{ fontSize:11, textTransform:"uppercase", color:"#9AA3A1", letterSpacing:"0.06em", fontWeight:500, padding:"0 12px 4px" }}>ALMACA, INC.</div>
+        <AccountRow label="Employee Account" />
+        <div style={{ marginTop:12 }}>
+          <div style={{ fontSize:11, textTransform:"uppercase", color:"#9AA3A1", letterSpacing:"0.06em", fontWeight:500, padding:"0 12px 4px" }}>ALMA LEGAL SERVICES, P.C.</div>
+          <AccountRow label="Employer Account" active />
+          <AccountRow label="Employee Account" />
+        </div>
+        <div style={{ marginTop:12 }}>
+          <div style={{ fontSize:11, textTransform:"uppercase", color:"#9AA3A1", letterSpacing:"0.06em", fontWeight:500, padding:"0 12px 4px" }}>PERSONAL</div>
+          <AccountRow label="Self-Petitioned Cases" dot="#C4CBCA" />
+        </div>
+      </div>
+      <div style={{ margin:"8px 12px 12px", padding:"8px 4px", display:"flex", alignItems:"center", gap:10 }}>
+        <Avatar initials="AT" tone="honey" size={36} status="online" />
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:500, color:"#161A18" }}>Assel Tuleubayeva</div>
+          <div style={{ fontSize:11, color:"#525C59" }}>sophia@tryalma.com</div>
+        </div>
+        <i className="ri-arrow-right-s-line" style={{ color:"#9AA3A1" }}></i>
+      </div>
+    </aside>
+  );
+}
+
+// ─── FLOW STEP INDICATOR ──────────────────────────────────────
+function FlowSteps({ step, setStep }) {
+  const steps = [
+    { id:"g", n:1, label:"Type" },
+    { id:"h", n:2, label:"Subject" },
+    { id:"i", n:3, label:"Builder" },
+    { id:"j", n:4, label:"Configured" },
+  ];
+  return (
+    <div style={{
+      display:"inline-flex", alignItems:"center",
+      padding:3, background:"#F5F7F6",
+      border:"1px solid #E0E5E4", borderRadius:8, gap:2,
+    }}>
+      {steps.map(s => {
+        const active = step===s.id;
+        const done = ["g","h","i","j"].indexOf(s.id) < ["g","h","i","j"].indexOf(step);
+        return (
+          <button key={s.id} onClick={()=>setStep(s.id)} style={{
+            display:"inline-flex", alignItems:"center", gap:6,
+            height:26, padding:"0 10px",
+            background: active?"#fff":"transparent",
+            border:`1px solid ${active?"#E0E5E4":"transparent"}`,
+            borderRadius:6, cursor:"pointer",
+            fontSize:12, fontWeight:500,
+            color: active?"#161A18":"#525C59",
+            boxShadow: active?"0 1px 2px rgba(10,13,20,0.04)":"none",
+            transition:"all 120ms",
+          }}>
+            <span style={{
+              width:16, height:16, borderRadius:999,
+              display:"grid", placeItems:"center",
+              background: active?"#207460":(done?"#76C08D":"#D5DBDA"),
+              color:"#fff", fontSize:10, fontWeight:600,
+            }}>
+              {done ? <i className="ri-check-line" style={{ fontSize:10 }}></i> : s.n}
+            </span>
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── TOP BAR ──────────────────────────────────────────────────
+function FlowTopBar({ step, setStep, name, setName, canSave, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const showName = step==="i"||step==="j";
+
+  return (
+    <div style={{
+      height:56, flex:"0 0 56px",
+      borderBottom:"1px solid #E0E5E4",
+      background:"#fff",
+      display:"flex", alignItems:"center", padding:"0 20px",
+      gap:16, position:"sticky", top:0, zIndex:20,
+    }}>
+      {/* Left */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, flex:"0 0 auto" }}>
+        <button onClick={()=>{ const prev={h:"g",i:"h",j:"i"}[step]; if(prev) setStep(prev); }}
+          style={{
+            width:32, height:32, display:"grid", placeItems:"center",
+            background:"transparent", border:"1px solid #E0E5E4",
+            borderRadius:8, cursor:"pointer", color:"#525C59",
+          }}>
+          <i className="ri-arrow-left-line" style={{ fontSize:16 }}></i>
+        </button>
+        <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, color:"#525C59" }}>
+          <span style={{ cursor:"pointer" }}>Analytics</span>
+          <i className="ri-arrow-right-s-line" style={{ fontSize:14, color:"#9AA3A1" }}></i>
+          <span style={{ color:"#161A18", fontWeight:500 }}>New Report</span>
+        </div>
+      </div>
+
+      {/* Center */}
+      <div style={{ flex:1, display:"flex", justifyContent:"center", alignItems:"center", gap:16 }}>
+        <FlowSteps step={step} setStep={setStep} />
+        {showName && (
+          <div
+            onClick={()=>setEditing(true)}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:8,
+              padding:"6px 12px",
+              border:`1px solid ${editing?"#A8D0C5":"transparent"}`,
+              background:editing?"#fff":"transparent",
+              borderRadius:8, cursor:"text", maxWidth:380,
+              transition:"all 120ms",
+            }}
+            onMouseEnter={(e)=>{ if(!editing) e.currentTarget.style.background="#F5F7F6"; }}
+            onMouseLeave={(e)=>{ if(!editing) e.currentTarget.style.background="transparent"; }}
+          >
+            {editing ? (
+              <input autoFocus value={name}
+                onChange={(e)=>setName(e.target.value)}
+                onBlur={()=>setEditing(false)}
+                onKeyDown={(e)=>{ if(e.key==="Enter") setEditing(false); }}
+                placeholder="Untitled report"
+                style={{
+                  background:"transparent", border:0, outline:"none",
+                  fontFamily:"'Inter Display', Inter",
+                  fontSize:14, fontWeight:500, color:"#161A18",
+                  letterSpacing:"-0.006em", width:320,
+                }} />
+            ) : (
+              <span style={{
+                fontFamily:"'Inter Display', Inter",
+                fontSize:14, fontWeight:500,
+                color:name?"#161A18":"#9AA3A1",
+                letterSpacing:"-0.006em",
+                whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+              }}>{name||"Untitled report"}</span>
+            )}
+            <i className="ri-pencil-line" style={{ color:"#9AA3A1", fontSize:14 }}></i>
+          </div>
+        )}
+      </div>
+
+      {/* Right */}
+      <div style={{ display:"flex", alignItems:"center", gap:6, flex:"0 0 auto" }}>
+        {step==="g" && (
+          <button style={{
+            height:32, padding:"0 12px", background:"transparent", border:0,
+            fontSize:13, fontWeight:500, color:"#525C59", cursor:"pointer",
+            display:"inline-flex", alignItems:"center", gap:6,
+          }}>
+            <i className="ri-close-line" style={{ fontSize:14 }}></i> Exit
+          </button>
+        )}
+        {(step==="i"||step==="j") && (
+          <>
+            <button title="Undo" style={{
+              width:32, height:32, display:"grid", placeItems:"center",
+              background:"transparent", border:"1px solid #E0E5E4",
+              borderRadius:8, cursor:"pointer", color:"#525C59",
+            }}><i className="ri-arrow-go-back-line" style={{ fontSize:16 }}></i></button>
+            <button title="Redo" style={{
+              width:32, height:32, display:"grid", placeItems:"center",
+              background:"transparent", border:"1px solid #E0E5E4",
+              borderRadius:8, cursor:"pointer", color:"#525C59",
+            }}><i className="ri-arrow-go-forward-line" style={{ fontSize:16 }}></i></button>
+            <span style={{ width:1, height:20, background:"#E0E5E4", margin:"0 6px" }}></span>
+            <button style={{
+              height:32, padding:"0 12px", background:"transparent", border:0,
+              fontSize:13, fontWeight:500, color:"#525C59", cursor:"pointer",
+              display:"inline-flex", alignItems:"center", gap:6,
+            }}>
+              <i className="ri-stack-line" style={{ fontSize:14 }}></i> Sample reports
+            </button>
+            <button
+              onClick={canSave ? onSave : undefined}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:6,
+                fontFamily:"Inter, system-ui", fontWeight:500,
+                fontSize:14, padding:"8px 14px",
+                borderRadius:8, border:0,
+                background:canSave?"#207460":"#EFF2F1",
+                color:canSave?"#fff":"#9AA3A1",
+                cursor:canSave?"pointer":"not-allowed",
+              }}>
+              <i className="ri-save-line"></i> Save report
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── CHARTS ───────────────────────────────────────────────────
+function StackedBarOverTime({ data, series, height=280 }) {
+  const [hover, setHover] = useState(null);
+  const W=880, H=height, padL=44, padR=16, padT=14, padB=28;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const totals = data.map(d=>series.reduce((s,k)=>s+(d.values[k.key]||0),0));
+  const maxRaw = Math.max(...totals,1);
+  const pow = Math.pow(10,Math.floor(Math.log10(maxRaw)));
+  const n = maxRaw/pow;
+  const max = (n<=1?1:n<=2?2:n<=5?5:10)*pow;
+  const barW = innerW/data.length*0.62;
+  const xC = (i)=>padL+(innerW/data.length)*(i+0.5);
+  const yS = (v)=>padT+innerH-(v/max)*innerH;
+
+  return (
+    <div style={{ position:"relative", width:"100%" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:H, display:"block", overflow:"visible" }}>
+        {Array.from({length:6},(_,i)=>{
+          const v=(max/5)*i, y=yS(v);
+          return <g key={i}>
+            <line x1={padL} x2={W-padR} y1={y} y2={y} stroke={i===0?"#C4CBCA":"#EFF2F1"} strokeWidth="1"/>
+            <text x={padL-8} y={y+4} fontSize="11" fill="#767F7D" textAnchor="end" fontFamily="Inter, system-ui">{v}</text>
+          </g>;
+        })}
+        {data.map((d,i)=>{
+          let acc=0;
+          const cx=xC(i);
+          return <g key={i} onMouseEnter={()=>setHover({i})} onMouseLeave={()=>setHover(null)}>
+            <rect x={cx-innerW/data.length/2} y={padT} width={innerW/data.length} height={innerH} fill="transparent"/>
+            {series.map((s,si)=>{
+              const v=d.values[s.key]||0;
+              if(!v) return null;
+              const h=(v/max)*innerH, y=yS(acc+v);
+              acc+=v;
+              const isFirst=si===0||series.slice(0,si).every(ss=>!d.values[ss.key]);
+              return <rect key={s.key} x={cx-barW/2} y={y} width={barW} height={h}
+                fill={s.color} rx={isFirst?4:0} ry={isFirst?4:0}
+                opacity={hover&&hover.i!==i?0.32:1}/>;
+            })}
+            {totals[i]>0&&<text x={cx} y={yS(totals[i])-6} fontSize="11" fill="#313836" textAnchor="middle" fontFamily="Inter, system-ui" fontWeight="500">{totals[i]}</text>}
+            <text x={cx} y={H-8} fontSize="11" fill="#767F7D" textAnchor="middle" fontFamily="Inter, system-ui">{d.label}</text>
+          </g>;
+        })}
+      </svg>
+      {hover&&(
+        <div style={{
+          position:"absolute", top:0,
+          left:`${(xC(hover.i)/W)*100}%`,
+          transform:"translate(-50%,-100%)",
+          background:"#161A18", color:"#fff", padding:"8px 10px",
+          borderRadius:8, fontSize:12, minWidth:160,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.16)", pointerEvents:"none",
+        }}>
+          <div style={{ fontWeight:500, marginBottom:4 }}>{data[hover.i].label}</div>
+          {series.slice().reverse().map(s=>{
+            const v=data[hover.i].values[s.key]||0;
+            if(!v) return null;
+            return <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, justifyContent:"space-between" }}>
+              <span style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <span style={{ width:8, height:8, borderRadius:2, background:s.color }}></span>{s.label}
+              </span>
+              <span style={{ fontWeight:500, marginLeft:12 }}>{v}</span>
+            </div>;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HorizontalBars({ data, formatValue=v=>v, accent="#207460" }) {
+  const max = Math.max(...data.map(d=>d.value),1);
+  const rowH=38, labelW=200, valueW=56, H=data.length*rowH+8;
+  return (
+    <svg viewBox={`0 0 880 ${H}`} style={{ width:"100%", height:H, display:"block" }}>
+      {data.map((d,i)=>{
+        const y=i*rowH+4, trackX=labelW+4, trackW=880-labelW-valueW-12, w=(d.value/max)*trackW;
+        return <g key={i}>
+          <text x={labelW-12} y={y+22} textAnchor="end" fontSize="13" fill="#161A18" fontFamily="Inter, system-ui" fontWeight="500">{d.label}</text>
+          {d.sublabel&&<text x={labelW-12} y={y+34} textAnchor="end" fontSize="11" fill="#767F7D" fontFamily="Inter, system-ui">{d.sublabel}</text>}
+          <rect x={trackX} y={y+8} width={trackW} height={20} rx={4} fill="#F5F7F6"/>
+          <rect x={trackX} y={y+8} width={w} height={20} rx={4} fill={d.color||accent}/>
+          <text x={trackX+w+8} y={y+22} fontSize="13" fill="#161A18" fontFamily="Inter, system-ui" fontWeight="500">{formatValue(d.value)}</text>
+        </g>;
+      })}
+    </svg>
+  );
+}
+
+// ─── REPORT BUILDER DATA ──────────────────────────────────────
+const RB_months = ["Jun '25","Jul '25","Aug '25","Sep '25","Oct '25","Nov '25","Dec '25","Jan '26","Feb '26","Mar '26","Apr '26","May '26"];
+const RB_filed = [
+  { label:RB_months[0],  values:{"H-1B":8,"TN":3,"L-1A":1,"O-1A":2,"PERM":4,"EB-2 NIW":1,"Other":1}},
+  { label:RB_months[1],  values:{"H-1B":6,"TN":4,"L-1A":2,"O-1A":1,"PERM":5,"EB-2 NIW":2}},
+  { label:RB_months[2],  values:{"H-1B":5,"TN":2,"L-1A":1,"PERM":3,"EB-2 NIW":1,"Other":1}},
+  { label:RB_months[3],  values:{"H-1B":9,"TN":5,"L-1A":2,"O-1A":3,"PERM":6,"EB-2 NIW":2,"Other":1}},
+  { label:RB_months[4],  values:{"H-1B":11,"TN":4,"L-1A":3,"O-1A":2,"PERM":7,"EB-2 NIW":3}},
+  { label:RB_months[5],  values:{"H-1B":7,"TN":3,"L-1A":2,"O-1A":1,"PERM":5,"EB-2 NIW":2,"Other":1}},
+  { label:RB_months[6],  values:{"H-1B":4,"TN":2,"L-1A":1,"O-1A":1,"PERM":3,"EB-2 NIW":1}},
+  { label:RB_months[7],  values:{"H-1B":14,"H-1B Lottery":22,"TN":6,"L-1A":3,"O-1A":4,"PERM":9,"EB-2 NIW":4,"Other":2}},
+  { label:RB_months[8],  values:{"H-1B":12,"TN":5,"L-1A":4,"O-1A":3,"PERM":8,"EB-2 NIW":3,"Other":1}},
+  { label:RB_months[9],  values:{"H-1B":18,"H-1B Lottery":8,"TN":6,"L-1A":4,"O-1A":4,"PERM":11,"EB-2 NIW":5,"Other":2}},
+  { label:RB_months[10], values:{"H-1B":13,"TN":5,"L-1A":3,"O-1A":3,"PERM":9,"EB-2 NIW":4,"Other":1}},
+  { label:RB_months[11], values:{"H-1B":9,"TN":4,"L-1A":2,"O-1A":2,"PERM":6,"EB-2 NIW":3,"Other":1}},
+];
+const RB_series = [
+  {key:"H-1B Lottery",color:"#4D9A88",label:"H-1B Lottery"},
+  {key:"H-1B",color:"#207460",label:"H-1B"},
+  {key:"PERM",color:"#13673E",label:"PERM"},
+  {key:"TN",color:"#7AB5A6",label:"TN"},
+  {key:"L-1A",color:"#F2BA77",label:"L-1A"},
+  {key:"O-1A",color:"#048AF5",label:"O-1A"},
+  {key:"EB-2 NIW",color:"#966EEE",label:"EB-2 NIW"},
+  {key:"Other",color:"#C4CBCA",label:"Other"},
+];
+
+// ─── BUILDER SHARED COMPONENTS ────────────────────────────────
+function Tooltip({ children, text }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span style={{ position:"relative", display:"inline-flex" }}
+      onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
+      {children}
+      {show&&<span style={{
+        position:"absolute", bottom:"calc(100% + 6px)", left:"50%",
+        transform:"translateX(-50%)",
+        background:"#161A18", color:"#fff",
+        padding:"6px 10px", borderRadius:6,
+        fontSize:11, lineHeight:"16px", whiteSpace:"normal",
+        maxWidth:200, textAlign:"center",
+        boxShadow:"0 4px 12px rgba(0,0,0,0.18)",
+        pointerEvents:"none", zIndex:30,
+      }}>
+        {text}
+        <span style={{
+          position:"absolute", top:"100%", left:"50%",
+          transform:"translateX(-50%)",
+          borderLeft:"5px solid transparent", borderRight:"5px solid transparent",
+          borderTop:"5px solid #161A18",
+        }}></span>
+      </span>}
+    </span>
+  );
+}
+
+const CHART_TYPES = [
+  {id:"bar",    icon:"ri-bar-chart-2-fill",          label:"Bar"},
+  {id:"stacked",icon:"ri-bar-chart-grouped-fill",    label:"Stacked Bar"},
+  {id:"hbar",   icon:"ri-bar-chart-horizontal-fill", label:"Horizontal Bar"},
+  {id:"line",   icon:"ri-line-chart-line",           label:"Line", disabled:"Requires a time dimension on X axis."},
+  {id:"pie",    icon:"ri-pie-chart-2-line",          label:"Pie",  disabled:"Too many categories — use bar chart."},
+  {id:"table",  icon:"ri-table-line",                label:"Table"},
+  {id:"list",   icon:"ri-list-check-2",              label:"List"},
+  {id:"kpi",    icon:"ri-number-1",                  label:"KPI Card"},
+];
+
+function ChartTypePicker({ active, onChange }) {
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
+      {CHART_TYPES.map(t=>{
+        const isActive=active===t.id, isDisabled=!!t.disabled;
+        const btn = (
+          <button
+            onClick={()=>!isDisabled&&onChange(t.id)}
+            disabled={isDisabled}
+            style={{
+              position:"relative", height:44, width:"100%",
+              display:"grid", placeItems:"center",
+              background:isActive?"#207460":(isDisabled?"#F5F7F6":"#fff"),
+              border:`1px solid ${isActive?"#207460":(isDisabled?"#EFF2F1":"#E0E5E4")}`,
+              borderRadius:8,
+              color:isDisabled?"#C4CBCA":(isActive?"#fff":"#313836"),
+              cursor:isDisabled?"not-allowed":"pointer",
+              fontSize:18,
+            }}
+            onMouseEnter={(e)=>{ if(!isDisabled&&!isActive) e.currentTarget.style.background="#F5F7F6"; }}
+            onMouseLeave={(e)=>{ if(!isDisabled&&!isActive) e.currentTarget.style.background="#fff"; }}
+          >
+            <i className={t.icon}></i>
+            {isDisabled&&<span style={{
+              position:"absolute", top:3, right:3,
+              width:14, height:14, borderRadius:999,
+              background:"#fff", border:"1px solid #E0E5E4",
+              display:"grid", placeItems:"center",
+              color:"#9AA3A1", fontSize:9,
+            }}><i className="ri-lock-line"></i></span>}
+          </button>
+        );
+        return <Tooltip key={t.id} text={t.disabled||t.label}>{btn}</Tooltip>;
+      })}
+    </div>
+  );
+}
+
+function FieldRow({ label, kind, badge }) {
+  const [hover, setHover] = useState(false);
+  const kindMap = {
+    measure:{ icon:"ri-function-line",             color:"#1A6251", bg:"#EBF5F2" },
+    text:   { icon:"ri-font-color",                color:"#525C59", bg:"#EFF2F1" },
+    enum:   { icon:"ri-list-check",                color:"#525C59", bg:"#EFF2F1" },
+    money:  { icon:"ri-money-dollar-circle-line",  color:"#B87428", bg:"#FEF2E6" },
+    date:   { icon:"ri-calendar-line",             color:"#048AF5", bg:"#E1F3FF" },
+    person: { icon:"ri-user-3-line",               color:"#525C59", bg:"#EFF2F1" },
+    bool:   { icon:"ri-toggle-line",               color:"#525C59", bg:"#EFF2F1" },
+  };
+  const k=kindMap[kind]||kindMap.text;
+  return (
+    <div draggable
+      onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+      style={{
+        display:"flex", alignItems:"center", gap:8,
+        height:30, padding:"0 8px",
+        background:hover?"#F5F7F6":"transparent",
+        borderRadius:6, cursor:"grab", userSelect:"none",
+      }}>
+      <i className="ri-draggable" style={{ color:hover?"#9AA3A1":"transparent", fontSize:14, flex:"0 0 14px" }}></i>
+      <span style={{ width:18, height:18, borderRadius:4, background:k.bg, color:k.color, display:"grid", placeItems:"center", fontSize:11, flex:"0 0 18px" }}>
+        <i className={k.icon}></i>
+      </span>
+      <span style={{ flex:1, fontSize:13, color:"#161A18", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{label}</span>
+      {badge&&<span style={{ fontSize:10, fontWeight:500, padding:"1px 6px", borderRadius:999, background:"#FEF5C7", color:"#886600", border:"1px solid #F8E59A", flex:"0 0 auto" }}>{badge}</span>}
+    </div>
+  );
+}
+
+function FieldGroup({ title, count, children, defaultOpen=true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ marginTop:10 }}>
+      <button onClick={()=>setOpen(!open)} style={{
+        display:"flex", alignItems:"center", gap:6, width:"100%",
+        padding:"4px 6px", background:"transparent", border:0, cursor:"pointer",
+      }}>
+        <i className={open?"ri-arrow-down-s-line":"ri-arrow-right-s-line"} style={{ fontSize:14, color:"#9AA3A1" }}></i>
+        <span style={{ fontSize:11, fontWeight:500, color:"#525C59", letterSpacing:"0.06em", textTransform:"uppercase" }}>{title}</span>
+        <span style={{ fontSize:11, color:"#9AA3A1", marginLeft:4 }}>{count}</span>
+      </button>
+      {open&&<div style={{ display:"flex", flexDirection:"column", gap:1, marginTop:2 }}>{children}</div>}
+    </div>
+  );
+}
+
+function LeftPanel() {
+  const [search, setSearch] = useState("");
+  const measures = [
+    {label:"Count of Cases",kind:"measure"},{label:"Total Fees",kind:"measure"},
+    {label:"Avg Fees per Case",kind:"measure"},{label:"Count of Beneficiaries",kind:"measure"},
+  ];
+  const cases = [
+    {label:"Case Type",kind:"enum"},{label:"Filing Type",kind:"enum"},
+    {label:"Status",kind:"enum"},{label:"Current Milestone",kind:"enum"},
+    {label:"Attorney",kind:"person"},{label:"Processing Method",kind:"enum"},
+    {label:"Payment Status",kind:"enum"},{label:"Pending Action",kind:"enum",badge:"Limited data"},
+    {label:"Legal Fees",kind:"money"},{label:"Premium Processing Fees",kind:"money"},
+    {label:"Regular USCIS Fees",kind:"money"},{label:"Additional Fees",kind:"money"},
+    {label:"Decision",kind:"enum"},{label:"Case Started",kind:"date"},
+  ];
+  const bens = [
+    {label:"Business Unit",kind:"enum",badge:"Inconsistent values"},
+    {label:"Cost Center",kind:"text"},{label:"Employment Status",kind:"enum"},
+    {label:"Class of Admission",kind:"enum"},{label:"Payroll Location",kind:"text"},
+    {label:"Country of Birth",kind:"enum"},
+    {label:"Work Authorization Valid Until",kind:"date"},
+    {label:"Passport Expiration Date",kind:"date"},
+    {label:"Green Card Stage",kind:"enum"},
+    {label:"Connection with HRIS",kind:"bool"},
+    {label:"Employment Start",kind:"date"},
+  ];
+  const m=(l)=>l.toLowerCase().includes(search.toLowerCase());
+  return (
+    <aside style={{
+      width:264, flex:"0 0 264px", borderRight:"1px solid #E0E5E4",
+      background:"#FCFDFC", display:"flex", flexDirection:"column",
+      height:"calc(100vh - 56px)", position:"sticky", top:56,
+    }}>
+      <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid #EFF2F1" }}>
+        <div style={{ fontSize:11, fontWeight:500, color:"#525C59", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:8 }}>Data Sources</div>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {["Cases","Beneficiaries"].map(s=>(
+            <span key={s} style={{
+              display:"inline-flex", alignItems:"center", gap:6,
+              padding:"4px 8px 4px 6px",
+              background:"#EBF5F2", color:"#1A6251",
+              border:"1px solid #D4E8E2", borderRadius:999,
+              fontSize:12, fontWeight:500,
+            }}>
+              <span style={{ width:14, height:14, borderRadius:999, background:"#207460", display:"grid", placeItems:"center", color:"#fff", fontSize:10 }}>
+                <i className={s==="Cases"?"ri-briefcase-line":"ri-user-3-line"}></i>
+              </span>
+              {s}
+              <i className="ri-close-line" style={{ fontSize:12, color:"#7AB5A6", cursor:"pointer" }}></i>
+            </span>
+          ))}
+        </div>
+      </div>
+      <div style={{ padding:"12px 16px 8px" }}>
+        <div style={{ position:"relative" }}>
+          <i className="ri-search-line" style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:"#9AA3A1", fontSize:14 }}></i>
+          <input value={search} onChange={(e)=>setSearch(e.target.value)}
+            placeholder="Search fields…"
+            style={{ width:"100%", height:32, padding:"0 10px 0 30px", background:"#fff", border:"1px solid #E0E5E4", borderRadius:6, fontSize:13, fontFamily:"Inter, system-ui", color:"#161A18", outline:"none" }}/>
+        </div>
+      </div>
+      <div style={{ flex:1, overflowY:"auto", padding:"0 12px 16px" }}>
+        <FieldGroup title="Measures" count={measures.filter(f=>m(f.label)).length}>
+          {measures.filter(f=>m(f.label)).map(f=><FieldRow key={f.label} {...f}/>)}
+        </FieldGroup>
+        <FieldGroup title="Cases" count={cases.filter(f=>m(f.label)).length}>
+          {cases.filter(f=>m(f.label)).map(f=><FieldRow key={f.label} {...f}/>)}
+        </FieldGroup>
+        <FieldGroup title="Beneficiaries" count={bens.filter(f=>m(f.label)).length}>
+          {bens.filter(f=>m(f.label)).map(f=><FieldRow key={f.label} {...f}/>)}
+        </FieldGroup>
+      </div>
+    </aside>
+  );
+}
+
+function ConfigSection({ title, children, action }) {
+  return (
+    <div style={{ padding:"16px 16px 14px", borderBottom:"1px solid #EFF2F1" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <div style={{ fontSize:11, fontWeight:500, color:"#525C59", letterSpacing:"0.06em", textTransform:"uppercase" }}>{title}</div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DropZone({ children, placeholder, filled }) {
+  return (
+    <div style={{
+      minHeight:44, padding:filled?6:"10px 12px",
+      background:filled?"#F5F7F6":"#FCFDFC",
+      border:filled?"1px solid #E0E5E4":"1.5px dashed #C4CBCA",
+      borderRadius:8, display:"flex", alignItems:"center", gap:8,
+      fontSize:12, color:"#767F7D",
+    }}>
+      {!filled&&<i className="ri-drag-drop-line" style={{ fontSize:14, color:"#9AA3A1" }}></i>}
+      {filled?children:placeholder}
+    </div>
+  );
+}
+
+function FieldChip({ label, kind, onRemove }) {
+  const k={enum:{color:"#525C59",bg:"#EFF2F1",icon:"ri-list-check"},date:{color:"#048AF5",bg:"#E1F3FF",icon:"ri-calendar-line"},money:{color:"#B87428",bg:"#FEF2E6",icon:"ri-money-dollar-circle-line"}}[kind]||{color:"#525C59",bg:"#EFF2F1",icon:"ri-hashtag"};
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 4px 4px 8px", background:"#fff", border:"1px solid #C4CBCA", borderRadius:6, fontSize:13, color:"#161A18" }}>
+      <span style={{ width:16, height:16, borderRadius:3, background:k.bg, color:k.color, display:"grid", placeItems:"center", fontSize:10 }}><i className={k.icon}></i></span>
+      {label}
+      <button onClick={onRemove} style={{ background:"transparent", border:0, cursor:"pointer", color:"#9AA3A1", padding:2, display:"grid", placeItems:"center", borderRadius:4 }}>
+        <i className="ri-close-line" style={{ fontSize:14 }}></i>
+      </button>
+    </span>
+  );
+}
+
+function PickerRow({ label, value, hint }) {
+  return (
+    <div>
+      {label&&<div style={{ fontSize:12, color:"#525C59", marginBottom:4 }}>{label}</div>}
+      <button style={{
+        width:"100%", height:34, padding:"0 10px",
+        background:"#fff", border:"1px solid #E0E5E4", borderRadius:6,
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        fontSize:13, color:"#161A18", fontFamily:"Inter, system-ui", cursor:"pointer",
+      }}>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
+          {hint&&<i className={hint} style={{ color:"#9AA3A1", fontSize:14 }}></i>}
+          {value}
+        </span>
+        <i className="ri-arrow-down-s-line" style={{ color:"#9AA3A1", fontSize:16 }}></i>
+      </button>
+    </div>
+  );
+}
+
+function ToggleRow({ label, on, onChange }) {
+  return (
+    <label style={{
+      display:"flex", alignItems:"center", justifyContent:"space-between", gap:8,
+      padding:"8px 10px", background:"#F5F7F6", border:"1px solid #EFF2F1",
+      borderRadius:8, fontSize:13, color:"#161A18", fontWeight:500, cursor:"pointer",
+    }}>
+      <span>{label}</span>
+      <button onClick={()=>onChange(!on)} style={{
+        width:36, height:20, borderRadius:999,
+        background:on?"#207460":"#C4CBCA",
+        border:0, padding:2, cursor:"pointer",
+        display:"flex", alignItems:"center",
+        justifyContent:on?"flex-end":"flex-start",
+        transition:"background 120ms", flex:"0 0 36px",
+      }}>
+        <span style={{ width:16, height:16, background:"#fff", borderRadius:999, boxShadow:"0 1px 2px rgba(0,0,0,0.18)" }}></span>
+      </button>
+    </label>
+  );
+}
+
+function RightRail({ blank=false }) {
+  const [chartType, setChartType] = useState("stacked");
+  const [compare, setCompare] = useState(false);
+  return (
+    <aside style={{
+      width:320, flex:"0 0 320px", borderLeft:"1px solid #E0E5E4",
+      background:"#fff", height:"calc(100vh - 56px)", position:"sticky", top:56, overflowY:"auto",
+    }}>
+      <ConfigSection title="Visualization">
+        <ChartTypePicker active={blank?"bar":chartType} onChange={blank?()=>{}:setChartType}/>
+      </ConfigSection>
+      <ConfigSection title="Subject" action={<button style={{ background:"none", border:0, color:"#1A6251", fontSize:12, fontWeight:500, cursor:"pointer", padding:0 }}>Edit</button>}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13 }}>
+          <i className="ri-briefcase-line" style={{ color:"#1A6251", fontSize:14 }}></i>
+          <span style={{ color:"#161A18", fontWeight:500 }}>Cases</span>
+          <i className="ri-add-line" style={{ color:"#9AA3A1", fontSize:12 }}></i>
+          <i className="ri-user-3-line" style={{ color:"#1A6251", fontSize:14 }}></i>
+          <span style={{ color:"#161A18", fontWeight:500 }}>Beneficiaries</span>
+        </div>
+        {!blank&&<div style={{ fontSize:11, color:"#767F7D", marginTop:4 }}>Cross-entity join · 1,284 records</div>}
+      </ConfigSection>
+      <ConfigSection title="Timeframe">
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {blank
+            ? <DropZone placeholder="Drag a date field here."/>
+            : <><PickerRow label="Date field" value="Case Started" hint="ri-calendar-line"/><PickerRow label="Range" value="Last 12 months"/></>
+          }
+          {!blank&&<ToggleRow label="Compare to previous period" on={compare} onChange={setCompare}/>}
+        </div>
+      </ConfigSection>
+      <ConfigSection title="Grouping">
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div>
+            <div style={{ fontSize:12, color:"#525C59", marginBottom:6 }}>Primary field</div>
+            {blank
+              ? <DropZone placeholder="Drag a field here."/>
+              : <DropZone filled><FieldChip label="Case Type" kind="enum" onRemove={()=>{}}/></DropZone>
+            }
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:"#525C59", marginBottom:6 }}>Secondary field <span style={{ color:"#9AA3A1" }}>(optional)</span></div>
+            <DropZone placeholder="Drag a field here to add a color split."/>
+          </div>
+        </div>
+      </ConfigSection>
+      <ConfigSection title="Filters">
+        {!blank&&(
+          <span style={{
+            display:"inline-flex", alignItems:"center", gap:6,
+            padding:"4px 4px 4px 10px",
+            background:"#fff", border:"1px solid #E0E5E4",
+            borderRadius:6, fontSize:13, color:"#161A18", marginBottom:8,
+          }}>
+            <span style={{ color:"#525C59" }}>Status</span>
+            <span style={{ color:"#9AA3A1" }}>is</span>
+            <span style={{ fontWeight:500 }}>In Progress</span>
+            <button style={{ background:"transparent", border:0, cursor:"pointer", color:"#9AA3A1", padding:2 }}>
+              <i className="ri-close-line" style={{ fontSize:14 }}></i>
+            </button>
+          </span>
+        )}
+        <button style={{
+          display:"inline-flex", alignItems:"center", gap:4,
+          padding:"6px 10px", background:"transparent", border:"1px dashed #C4CBCA",
+          borderRadius:6, fontSize:13, color:"#525C59", cursor:"pointer",
+        }}>
+          <i className="ri-add-line" style={{ fontSize:14 }}></i> Add filter
+        </button>
+      </ConfigSection>
+    </aside>
+  );
+}
+
+// ─── SCREEN G: CREATE ENTRY ───────────────────────────────────
+const G_TYPES = [
+  {id:"count-over-time",icon:"ri-line-chart-line",title:"Count Over Time",desc:"Track how a metric changes month over month — filings, fees, headcount."},
+  {id:"grouped-count",icon:"ri-bar-chart-2-line",title:"Grouped Count",desc:"Compare a metric across categories — case type, business unit, attorney."},
+  {id:"list",icon:"ri-list-check-2",title:"List",desc:"Show individual records with selected fields — like a saved view."},
+  {id:"summary-kpi",icon:"ri-number-1",title:"Summary KPI",desc:"A single big number with trend — for executive dashboards."},
+  {id:"table",icon:"ri-table-line",title:"Table",desc:"Cross-tab metrics by two dimensions — pivot-table style breakdowns."},
+];
+
+function ScreenG_Preview({ type }) {
+  const colors=["#207460","#4D9A88","#7AB5A6","#A8D0C5","#D88F4E","#F2BA77"];
+  if(type==="count-over-time"){
+    const pts=[12,18,14,22,28,26,34,38,32,44,40,52];
+    const W=480,H=200,pad=16,max=Math.max(...pts);
+    const x=(i)=>pad+(i/(pts.length-1))*(W-pad*2);
+    const y=(v)=>H-pad-(v/max)*(H-pad*2);
+    const path=pts.map((p,i)=>`${i===0?"M":"L"} ${x(i)} ${y(p)}`).join(" ");
+    const area=`${path} L ${x(pts.length-1)} ${H-pad} L ${pad} ${H-pad} Z`;
+    return <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", maxWidth:480 }}>
+      <path d={area} fill="#207460" opacity="0.08"/>
+      <path d={path} fill="none" stroke="#207460" strokeWidth="2.5"/>
+      {pts.map((p,i)=><circle key={i} cx={x(i)} cy={y(p)} r="3" fill="#207460"/>)}
+    </svg>;
+  }
+  if(type==="grouped-count"){
+    const bars=[38,24,18,14,9,5],max=Math.max(...bars);
+    return <div style={{ width:"100%", maxWidth:480, display:"flex", alignItems:"flex-end", gap:12, height:200 }}>
+      {bars.map((b,i)=><div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+        <div style={{ fontSize:11, color:"#525C59", fontWeight:500 }}>{b}</div>
+        <div style={{ width:"100%", height:(b/max)*160, background:colors[i%colors.length], borderRadius:"4px 4px 0 0" }}></div>
+      </div>)}
+    </div>;
+  }
+  if(type==="list"){
+    const rows=[["Priya Sharma","H-1B"],["Lin Wei","L-1A"],["Carlos Mendez","PERM"],["Aanya Krishnan","H-1B"],["Marcus Johnson","TN"]];
+    return <div style={{ width:"100%", maxWidth:480, fontSize:12 }}>
+      {rows.map((r,i)=><div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 80px", padding:"10px 0", borderBottom:i<rows.length-1?"1px solid #EFF2F1":"none", alignItems:"center", gap:12 }}>
+        <span style={{ color:"#161A18", fontWeight:500 }}>{r[0]}</span>
+        <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", padding:"2px 8px", background:"#EFF2F1", color:"#313836", borderRadius:4, fontSize:11, fontWeight:500 }}>{r[1]}</span>
+      </div>)}
+    </div>;
+  }
+  if(type==="summary-kpi"){
+    return <div style={{ textAlign:"center", padding:12 }}>
+      <div style={{ fontSize:11, color:"#767F7D", letterSpacing:"0.04em", textTransform:"uppercase", fontWeight:500 }}>Total Active Cases</div>
+      <div style={{ fontFamily:"'Inter Display', Inter", fontWeight:500, fontSize:72, lineHeight:"84px", color:"#161A18", letterSpacing:"-0.02em", marginTop:6 }}>409</div>
+      <div style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"4px 10px", background:"#E2F6E6", color:"#2E744C", border:"1px solid #C4EACC", borderRadius:999, fontSize:12, fontWeight:500, marginTop:8 }}>
+        <i className="ri-arrow-up-line" style={{ fontSize:12 }}></i> +8.4% vs last quarter
+      </div>
+    </div>;
+  }
+  if(type==="table"){
+    const cols=["","H-1B","PERM","TN"];
+    const rows=[["Engineering",98,31,13],["Hardware",54,21,14],["Product",32,11,4],["Sales",12,18,8]];
+    return <div style={{ width:"100%", maxWidth:480, fontSize:12 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr 1fr 1fr", padding:"8px 12px", background:"#F5F7F6", borderRadius:"6px 6px 0 0", border:"1px solid #E0E5E4", borderBottom:0, fontWeight:500, color:"#525C59" }}>
+        {cols.map(c=><span key={c}>{c||"Business Unit"}</span>)}
+      </div>
+      {rows.map((r,i)=><div key={i} style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr 1fr 1fr", padding:"10px 12px", border:"1px solid #E0E5E4", borderTop:0, color:"#161A18" }}>
+        <span style={{ fontWeight:500 }}>{r[0]}</span><span>{r[1]}</span><span>{r[2]}</span><span>{r[3]}</span>
+      </div>)}
+    </div>;
+  }
+  return null;
+}
+
+function ScreenG({ onNext }) {
+  const [type, setType] = useState("grouped-count");
+  const selected = G_TYPES.find(t=>t.id===type);
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", height:"calc(100vh - 56px)", background:"#FCFDFC" }}>
+      <div style={{ flex:1, display:"flex", minHeight:0 }}>
+        {/* Left */}
+        <div style={{ width:360, flex:"0 0 360px", borderRight:"1px solid #E0E5E4", background:"#fff", padding:"32px 28px", overflowY:"auto" }}>
+          <div style={{ background:"#EBF5F2", border:"1px solid #D4E8E2", borderRadius:12, padding:18, marginBottom:24 }}>
+            <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+              <div style={{ width:32, height:32, borderRadius:8, background:"#207460", color:"#fff", display:"grid", placeItems:"center", fontSize:16, flex:"0 0 32px" }}>
+                <i className="ri-stack-line"></i>
+              </div>
+              <div>
+                <div style={{ fontFamily:"'Inter Display', Inter", fontWeight:500, fontSize:15, color:"#161A18" }}>Start with a template</div>
+                <div style={{ fontSize:12, color:"#1A6251", lineHeight:"18px", marginTop:2 }}>Pre-built MBR-Lite reports — Volume, Spend, Approvals.</div>
+                <button style={{ marginTop:10, height:28, padding:"0 12px", background:"#fff", border:"1px solid #C4D8D1", borderRadius:6, fontSize:12, fontWeight:500, color:"#1A6251", cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4 }}>
+                  Browse template library <i className="ri-arrow-right-line" style={{ fontSize:12 }}></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div style={{ fontSize:11, fontWeight:500, color:"#525C59", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>Build from scratch</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {G_TYPES.map(t=>{
+              const isActive=type===t.id;
+              return (
+                <button key={t.id} onClick={()=>setType(t.id)} style={{
+                  display:"flex", alignItems:"flex-start", gap:12,
+                  padding:"12px 14px",
+                  background:isActive?"#F5F7F6":"#fff",
+                  border:`1px solid ${isActive?"#A8D0C5":"#E0E5E4"}`,
+                  borderRadius:10, cursor:"pointer", textAlign:"left",
+                  fontFamily:"Inter, system-ui",
+                  outline:isActive?"1px solid #A8D0C5":"none",
+                }}>
+                  <span style={{ width:28, height:28, borderRadius:7, background:isActive?"#207460":"#EFF2F1", color:isActive?"#fff":"#525C59", display:"grid", placeItems:"center", fontSize:14, flex:"0 0 28px" }}>
+                    <i className={t.icon}></i>
+                  </span>
+                  <span style={{ flex:1 }}>
+                    <span style={{ display:"block", fontSize:14, fontWeight:500, color:"#161A18", letterSpacing:"-0.006em", marginBottom:2 }}>{t.title}</span>
+                    <span style={{ display:"block", fontSize:12, color:"#525C59", lineHeight:"17px" }}>{t.desc}</span>
+                  </span>
+                  {isActive&&<i className="ri-check-line" style={{ color:"#207460", fontSize:16 }}></i>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {/* Preview */}
+        <div style={{ flex:1, padding:"32px 40px", overflowY:"auto" }}>
+          <div style={{ maxWidth:720 }}>
+            <div style={{ fontSize:12, color:"#767F7D", marginBottom:4, letterSpacing:"0.04em", textTransform:"uppercase", fontWeight:500 }}>Preview · {selected.title}</div>
+            <h1 style={{ fontFamily:"'Inter Display', Inter", fontSize:32, lineHeight:"40px", letterSpacing:"-0.015em", fontWeight:500, color:"#161A18", margin:0 }}>{selected.title}</h1>
+            <p style={{ fontSize:15, lineHeight:"22px", color:"#525C59", margin:"8px 0 24px", maxWidth:560 }}>{selected.desc}</p>
+            <div style={{ background:"#fff", border:"1px solid #E0E5E4", borderRadius:12, padding:28, minHeight:320, display:"grid", placeItems:"center" }}>
+              <ScreenG_Preview type={type}/>
+            </div>
+            <div style={{ display:"flex", gap:16, marginTop:20 }}>
+              {[{l:"Time to build",v:"~30 sec"},{l:"Best for",v:type==="summary-kpi"?"Dashboards":type==="list"?"Drill-down review":type==="table"?"Cross-tab analysis":"Trends & comparisons"},{l:"Re-runs automatically",v:"Yes"}].map(b=>(
+                <div key={b.l} style={{ flex:1 }}>
+                  <div style={{ fontSize:11, color:"#767F7D", letterSpacing:"0.04em", textTransform:"uppercase", fontWeight:500 }}>{b.l}</div>
+                  <div style={{ fontSize:14, fontWeight:500, color:"#161A18", marginTop:2 }}>{b.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{ height:64, padding:"0 32px", background:"#fff", borderTop:"1px solid #E0E5E4", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ fontSize:12, color:"#767F7D" }}>Step 1 of 3 · Choose a report type</div>
+        <Button variant="primary" iconRight="ri-arrow-right-line" onClick={onNext}>Next</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SCREEN H: SUBJECT ────────────────────────────────────────
+const H_SUBJECTS = [
+  {id:"cases",icon:"ri-briefcase-line",title:"Cases",desc:"Analyze individual immigration filings. Best for case volumes, outcomes, fees, and attorney performance.",examples:["Cases by status","Avg legal fees by case type","H-1B approvals by attorney"]},
+  {id:"beneficiaries",icon:"ri-user-3-line",title:"Beneficiaries",desc:"Analyze your sponsored employee population. Best for expiry tracking, headcount, and HRIS status.",examples:["Headcount by visa type","Work auth expiring in 90 days","HRIS sync status"]},
+  {id:"both",icon:"ri-links-line",title:"Cases + Beneficiaries",desc:"Combine case data with employee dimensions. Best for spend by department, headcount by visa type, and cross-cutting questions.",examples:["Spend by business unit","Active cases by cost center","Filings per HRIS-synced employee"],recommended:true},
+];
+
+function ScreenH({ onBack, onNext }) {
+  const [pick, setPick] = useState("both");
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", height:"calc(100vh - 56px)", background:"#FCFDFC" }}>
+      <div style={{ flex:1, overflowY:"auto", padding:"48px 40px" }}>
+        <div style={{ maxWidth:1080, margin:"0 auto" }}>
+          <div style={{ fontSize:12, color:"#767F7D", marginBottom:4, letterSpacing:"0.04em", textTransform:"uppercase", fontWeight:500 }}>Step 2 of 3</div>
+          <h1 style={{ fontFamily:"'Inter Display', Inter", fontSize:36, lineHeight:"44px", letterSpacing:"-0.015em", fontWeight:500, color:"#161A18", margin:0 }}>What are you reporting on?</h1>
+          <p style={{ fontSize:15, lineHeight:"22px", color:"#525C59", margin:"8px 0 32px", maxWidth:640 }}>Pick the data this report draws from. You can change it later, but switching subject will reset your fields and groupings.</p>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:20 }}>
+            {H_SUBJECTS.map(s=>{
+              const isActive=pick===s.id;
+              return (
+                <button key={s.id} onClick={()=>setPick(s.id)} style={{
+                  position:"relative", display:"flex", flexDirection:"column",
+                  padding:24, background:isActive?"#F5F7F6":"#fff",
+                  border:`1.5px solid ${isActive?"#207460":"#E0E5E4"}`,
+                  borderRadius:12, cursor:"pointer", textAlign:"left",
+                  fontFamily:"Inter, system-ui", minHeight:280,
+                  boxShadow:isActive?"0 2px 8px rgba(32,116,96,0.1)":"0 1px 2px rgba(10,13,20,0.03)",
+                  transition:"all 120ms",
+                }}>
+                  {s.recommended&&<span style={{ position:"absolute", top:14, right:14, padding:"2px 8px", borderRadius:999, background:"#FFF5D1", color:"#886600", border:"1px solid #F8E59A", fontSize:10, fontWeight:500, textTransform:"uppercase" }}>Recommended</span>}
+                  <span style={{ position:"absolute", top:14, left:14, width:18, height:18, borderRadius:999, border:`1.5px solid ${isActive?"#207460":"#C4CBCA"}`, background:isActive?"#207460":"#fff", display:"grid", placeItems:"center" }}>
+                    {isActive&&<i className="ri-check-line" style={{ color:"#fff", fontSize:12 }}></i>}
+                  </span>
+                  <span style={{ width:44, height:44, borderRadius:10, background:isActive?"#207460":"#EBF5F2", color:isActive?"#fff":"#1A6251", display:"grid", placeItems:"center", fontSize:22, marginBottom:16, marginTop:8 }}>
+                    <i className={s.icon}></i>
+                  </span>
+                  <span style={{ fontFamily:"'Inter Display', Inter", fontSize:20, fontWeight:500, color:"#161A18", letterSpacing:"-0.01em", marginBottom:8 }}>{s.title}</span>
+                  <span style={{ fontSize:13, lineHeight:"20px", color:"#525C59", marginBottom:16 }}>{s.desc}</span>
+                  <span style={{ marginTop:"auto" }}>
+                    <span style={{ display:"block", fontSize:11, color:"#767F7D", letterSpacing:"0.04em", textTransform:"uppercase", fontWeight:500, marginBottom:6 }}>Example reports</span>
+                    {s.examples.map(ex=><span key={ex} style={{ display:"block", fontSize:12, color:"#313836", padding:"3px 0", lineHeight:"18px" }}>· {ex}</span>)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div style={{ height:64, padding:"0 32px", background:"#fff", borderTop:"1px solid #E0E5E4", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <Button variant="ghost" icon="ri-arrow-left-line" onClick={onBack}>Back</Button>
+        <div style={{ fontSize:12, color:"#767F7D" }}>Step 2 of 3 · Choose subject</div>
+        <Button variant="primary" iconRight="ri-arrow-right-line" onClick={onNext}>Next</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SCREEN I: BLANK BUILDER ──────────────────────────────────
+function ScreenI() {
+  return (
+    <div style={{ flex:1, display:"flex", minHeight:0 }}>
+      <LeftPanel/>
+      <div style={{ flex:1, padding:"0 32px 32px", overflowY:"auto", height:"calc(100vh - 56px)", display:"flex", flexDirection:"column" }}>
+        <div style={{ display:"flex", alignItems:"center", padding:"12px 0", gap:4 }}>
+          {[{i:"ri-arrow-go-back-line",t:"Undo"},{i:"ri-arrow-go-forward-line",t:"Redo"},{i:"ri-refresh-line",t:"Refresh"}].map(b=>(
+            <button key={b.t} title={b.t} style={{ width:30, height:30, display:"grid", placeItems:"center", background:"transparent", border:"1px solid transparent", borderRadius:6, cursor:"pointer", color:"#525C59", fontSize:16 }}
+              onMouseEnter={(e)=>e.currentTarget.style.background="#F5F7F6"}
+              onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}>
+              <i className={b.i}></i>
+            </button>
+          ))}
+        </div>
+        <div style={{ flex:1, marginTop:4, background:"#fff", border:"1px solid #E0E5E4", borderRadius:12, padding:24, display:"flex", alignItems:"center", justifyContent:"center", minHeight:480 }}>
+          <div style={{ textAlign:"center", maxWidth:360 }}>
+            <div style={{ width:56, height:56, borderRadius:12, background:"#EBF5F2", color:"#1A6251", display:"grid", placeItems:"center", margin:"0 auto 16px", fontSize:24 }}>
+              <i className="ri-bar-chart-2-line"></i>
+            </div>
+            <div style={{ fontFamily:"'Inter Display', Inter", fontSize:18, fontWeight:500, color:"#161A18", letterSpacing:"-0.005em", marginBottom:6 }}>Add a metric to your Y axis to get started.</div>
+            <div style={{ fontSize:13, color:"#525C59", lineHeight:"20px" }}>
+              Drag a measure like <strong style={{ color:"#161A18" }}>Count of Cases</strong> from the left panel into the Grouping or Timeframe section on the right.
+            </div>
+          </div>
+        </div>
+      </div>
+      <RightRail blank/>
+    </div>
+  );
+}
+
+// ─── SCREEN J: CONFIGURED BUILDER ────────────────────────────
+function ScreenJ() {
+  const total = RB_filed.reduce((s,m)=>s+Object.values(m.values).reduce((a,b)=>a+b,0),0);
+  return (
+    <div style={{ flex:1, display:"flex", minHeight:0 }}>
+      <LeftPanel/>
+      <div style={{ flex:1, padding:"0 32px 32px", overflowY:"auto", height:"calc(100vh - 56px)" }}>
+        <div style={{ display:"flex", alignItems:"center", padding:"12px 0", gap:4 }}>
+          {[{i:"ri-arrow-go-back-line",t:"Undo"},{i:"ri-arrow-go-forward-line",t:"Redo"},{i:"ri-refresh-line",t:"Refresh"}].map(b=>(
+            <button key={b.t} title={b.t} style={{ width:30, height:30, display:"grid", placeItems:"center", background:"transparent", border:"1px solid transparent", borderRadius:6, cursor:"pointer", color:"#525C59", fontSize:16 }}
+              onMouseEnter={(e)=>e.currentTarget.style.background="#F5F7F6"}
+              onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}>
+              <i className={b.i}></i>
+            </button>
+          ))}
+        </div>
+        <div style={{ background:"#fff", border:"1px solid #E0E5E4", borderRadius:12, padding:24, boxShadow:"0 1px 2px rgba(10,13,20,0.03)" }}>
+          <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:16, gap:16 }}>
+            <div>
+              <div style={{ fontFamily:"'Inter Display', Inter", fontWeight:500, fontSize:18, color:"#161A18", letterSpacing:"-0.005em" }}>Cases filed by type</div>
+              <div style={{ fontSize:13, color:"#767F7D", marginTop:2 }}>Last 12 months · grouped by Case Type · {total} total</div>
+            </div>
+            <i className="ri-more-2-fill" style={{ color:"#9AA3A1", padding:"6px 4px", cursor:"pointer", fontSize:16 }}></i>
+          </div>
+          <StackedBarOverTime data={RB_filed} series={RB_series} height={340}/>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:16, marginTop:18, paddingTop:14, borderTop:"1px solid #EFF2F1" }}>
+            {RB_series.map(s=>(
+              <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#313836" }}>
+                <span style={{ width:10, height:10, borderRadius:2, background:s.color }}></span>{s.label}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop:14, fontSize:12, color:"#767F7D" }}>
+          Data as of May 6, 2026 at 9:41 AM ·{" "}
+          <span style={{ color:"#1A6251", cursor:"pointer", fontWeight:500 }}>Refresh</span>
+        </div>
+      </div>
+      <RightRail/>
+    </div>
+  );
+}
+
+// ─── STANDALONE SCREEN WRAPPER ──────────────────────────────
+function StandaloneApp() {
+  const [name, setName] = React.useState("Cases filed by type — Last 12 months");
+
+  return (
+    <div style={{ display:"flex", minHeight:"100vh", background:"#FCFDFC" }}>
+      <Sidebar activeKey="analytics" onNavigate={()=>{}}/>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden" }}>
+        <FlowTopBar
+          step="g"
+          setStep={()=>{}}
+          name={name}
+          setName={setName}
+          canSave={name.trim().length>0 && ("g"==="i"||"g"==="j")}
+          onSave={()=>{}}
+        />
+        <div style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0 }}>
+          <ScreenG onNext={()=>{}}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<StandaloneApp/>);
+</script>
+</body>
+</html>

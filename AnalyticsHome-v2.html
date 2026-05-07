@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Reporting v2 — Analytics</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Display:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css"/>
+<style>
+html,body,#root{margin:0;padding:0;height:100%;font-family:"Inter",system-ui,sans-serif;color:#161A18;background:#FCFDFC;-webkit-font-smoothing:antialiased;}
+*{box-sizing:border-box;} button{font-family:inherit;}
+*::-webkit-scrollbar{width:10px;height:10px;}
+*::-webkit-scrollbar-thumb{background:#D5DBDA;border-radius:999px;border:2px solid transparent;background-clip:content-box;}
+*::-webkit-scrollbar-track{background:transparent;}
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+</head>
+<body><div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ─── ATOMS ────────────────────────────────────────────────────
+function Button({ children, variant="primary", size="md", icon, iconRight, onClick, style, disabled }) {
+  const base = { display:"inline-flex", alignItems:"center", gap:6, fontFamily:"Inter, system-ui", fontWeight:500, fontSize:size==="sm"?13:14, lineHeight:"20px", letterSpacing:"-0.006em", padding:size==="sm"?"5px 10px":"8px 14px", borderRadius:8, border:"1px solid transparent", cursor:disabled?"not-allowed":"pointer", whiteSpace:"nowrap", transition:"background 120ms ease", opacity:disabled?0.5:1 };
+  const variants = { primary:{background:"#207460",color:"#fff"}, secondary:{background:"#fff",color:"#161A18",borderColor:"#E0E5E4"}, ghost:{background:"transparent",color:"#525C59"}, danger:{background:"#E55767",color:"#fff"} };
+  return <button disabled={disabled} onClick={!disabled?onClick:undefined} style={{...base,...variants[variant],...style}} onMouseEnter={(e)=>{ if(disabled)return; if(variant==="primary")e.currentTarget.style.background="#155042"; if(variant==="secondary")e.currentTarget.style.background="#F5F7F6"; if(variant==="ghost"){e.currentTarget.style.background="#F5F7F6";e.currentTarget.style.color="#161A18";} }} onMouseLeave={(e)=>{ if(!disabled)Object.assign(e.currentTarget.style,variants[variant]); }}>{icon&&<i className={icon}></i>}{children}{iconRight&&<i className={iconRight}></i>}</button>;
+}
+
+function Avatar({ initials, size=32, tone="sage", status }) {
+  const t = {sage:{bg:"#D4E8E2",fg:"#155042"},honey:{bg:"#FCE6CF",fg:"#7A4C18"}}[tone]||{bg:"#D4E8E2",fg:"#155042"};
+  return <div style={{position:"relative",width:size,height:size,flex:`0 0 ${size}px`}}><div style={{width:size,height:size,borderRadius:999,background:t.bg,color:t.fg,display:"grid",placeItems:"center",fontWeight:500,fontSize:Math.round(size*0.38)}}>{initials}</div>{status&&<span style={{position:"absolute",right:-1,bottom:-1,width:Math.max(8,size*0.28),height:Math.max(8,size*0.28),borderRadius:999,background:"#2E744C",border:"2px solid #fff"}}></span>}</div>;
+}
+
+function NavItem({ icon, label, active, onClick, hasChevron, badge }) {
+  const [hover, setHover] = useState(false);
+  return <div onClick={onClick} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{display:"flex",alignItems:"center",gap:10,height:34,padding:"0 12px",borderRadius:8,cursor:"pointer",background:active?"#E0E5E4":(hover?"#EFF2F1":"transparent"),color:active?"#161A18":(hover?"#161A18":"#525C59"),fontWeight:500,fontSize:14,letterSpacing:"-0.006em",userSelect:"none"}}><i className={icon} style={{fontSize:16,color:active?"#1A6251":"#9AA3A1"}}></i><span style={{flex:1}}>{label}</span>{badge&&<span style={{fontSize:11,padding:"1px 6px",borderRadius:4,background:active?"#207460":"#E0E5E4",color:active?"#fff":"#525C59",fontWeight:600}}>{badge}</span>}{hasChevron&&<i className="ri-arrow-right-s-line" style={{fontSize:16,color:"#9AA3A1"}}></i>}</div>;
+}
+
+function AccountRow({ label, active, dot="#9AA3A1" }) {
+  return <div style={{position:"relative"}}>{active&&<span style={{position:"absolute",left:-12,top:4,bottom:4,width:3,borderRadius:"0 3px 3px 0",background:"#207460"}}></span>}<div style={{display:"flex",alignItems:"center",gap:10,height:30,padding:"0 12px",borderRadius:8,cursor:"pointer",fontSize:13,color:"#161A18",fontWeight:active?500:400,background:active?"#E0E5E4":"transparent"}}><span style={{width:6,height:6,borderRadius:999,background:active?"#207460":dot}}></span><span style={{flex:1}}>{label}</span>{active&&<i className="ri-check-line" style={{color:"#207460"}}></i>}</div></div>;
+}
+
+// ─── MAIN SIDEBAR (icon-only strip) ─────────────────────────
+function Sidebar({ activeKey, onNavigate }) {
+  const items = [
+    {key:"dashboard",     icon:"ri-dashboard-line"},
+    {key:"beneficiaries", icon:"ri-user-3-line"},
+    {key:"cases",         icon:"ri-briefcase-line"},
+    {key:"petitioners",   icon:"ri-bank-line"},
+    {key:"analytics",     icon:"ri-bar-chart-2-line"},
+    {key:"questionnaires",icon:"ri-questionnaire-line"},
+    {key:"billing",       icon:"ri-bill-line"},
+  ];
+  const bottom = [
+    {key:"settings", icon:"ri-settings-3-line"},
+    {key:"support",  icon:"ri-customer-service-2-line"},
+  ];
+  return <aside style={{width:56,height:"100vh",background:"#F5F7F6",borderRight:"1px solid #E0E5E4",display:"flex",flexDirection:"column",alignItems:"center",flex:"0 0 56px",position:"sticky",top:0}}>
+    {/* Logo */}
+    <div style={{width:56,height:56,display:"grid",placeItems:"center",flexShrink:0}}>
+      <div style={{width:30,height:30,borderRadius:8,background:"#207460",display:"grid",placeItems:"center"}}>
+        <i className="ri-leaf-line" style={{fontSize:16,color:"#fff"}}></i>
+      </div>
+    </div>
+    {/* Main nav icons */}
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 6px",width:"100%"}}>
+      {items.map(it=>{
+        const isActive=activeKey===it.key;
+        return <button key={it.key} onClick={()=>onNavigate(it.key)}
+          title={it.key.charAt(0).toUpperCase()+it.key.slice(1)}
+          style={{width:40,height:36,display:"grid",placeItems:"center",borderRadius:8,border:0,cursor:"pointer",background:isActive?"#E0E5E4":"transparent",color:isActive?"#1A6251":"#9AA3A1",fontSize:18,transition:"all 120ms"}}
+          onMouseEnter={(e)=>{if(!isActive){e.currentTarget.style.background="#EFF2F1";e.currentTarget.style.color="#525C59";}}}
+          onMouseLeave={(e)=>{if(!isActive){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#9AA3A1";}}}>
+          <i className={it.icon}></i>
+        </button>;
+      })}
+    </div>
+    {/* Bottom icons */}
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"8px 6px",width:"100%",borderTop:"1px solid #E0E5E4"}}>
+      {bottom.map(it=><button key={it.key} title={it.key} style={{width:40,height:36,display:"grid",placeItems:"center",borderRadius:8,border:0,cursor:"pointer",background:"transparent",color:"#9AA3A1",fontSize:18}} onMouseEnter={(e)=>{e.currentTarget.style.background="#EFF2F1";}} onMouseLeave={(e)=>{e.currentTarget.style.background="transparent";}}><i className={it.icon}></i></button>)}
+      {/* Avatar */}
+      <div style={{width:32,height:32,borderRadius:999,background:"#FCE6CF",color:"#7A4C18",display:"grid",placeItems:"center",fontSize:12,fontWeight:600,marginTop:4,cursor:"pointer"}}>AT</div>
+    </div>
+  </aside>;
+}
+
+// ─── ANALYTICS LEFT NAV ───────────────────────────────────────
+// "Reports" and "Dashboards" are the two primary tabs.
+// Sub-items (My reports, Shared, Favorites, Trash) live under Reports.
+// Folders always visible.
+function AnalyticsNav({ active, onNavigate }) {
+  const [search, setSearch] = useState("");
+  const folders = [
+    {key:"f-exec",    label:"Executive Reviews", count:8},
+    {key:"f-ops",     label:"Operations",        count:14},
+    {key:"f-finance", label:"Finance",           count:9},
+    {key:"f-lottery", label:"H-1B Lottery FY27", count:6, highlight:true},
+  ];
+  // Determine which top tab is active
+  const topTab = (active==="dashboards"||active==="dashboard-canvas"||active==="dashboard-empty") ? "dashboards" : "reports";
+
+  return <aside style={{width:248,flex:"0 0 248px",borderRight:"1px solid #E0E5E4",background:"#fff",height:"100vh",position:"sticky",top:0,display:"flex",flexDirection:"column"}}>
+    {/* Search */}
+    <div style={{padding:"14px 12px 10px"}}>
+      <div style={{position:"relative"}}>
+        <i className="ri-search-line" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#9AA3A1",fontSize:14}}></i>
+        <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search reports..."
+          style={{width:"100%",height:32,padding:"0 10px 0 32px",background:"#F5F7F6",border:"1px solid #E0E5E4",borderRadius:7,fontSize:13,color:"#161A18",outline:"none",fontFamily:"Inter,system-ui"}}/>
+      </div>
+    </div>
+
+    <div style={{flex:1,overflowY:"auto",padding:"0 8px 16px"}}>
+      {/* PRIMARY TABS: Reports | Dashboards */}
+      {[
+        {key:"reports",    icon:"ri-file-chart-line",  label:"Reports",    badge:"42"},
+        {key:"dashboards", icon:"ri-layout-grid-line", label:"Dashboards", badge:"5"},
+        {key:"templates",  icon:"ri-stack-line",       label:"Templates"},
+      ].map(it=>{
+        const isActive = active===it.key || (it.key==="reports" && !["dashboards","templates"].includes(active) && !active.startsWith("f-") && active!=="mine"&&active!=="shared"&&active!=="favorites"&&active!=="trash") || (it.key==="dashboards" && (active==="dashboard-canvas"||active==="dashboard-empty"));
+        return <div key={it.key} onClick={()=>onNavigate(it.key)}
+          style={{display:"flex",alignItems:"center",gap:9,height:34,padding:"0 10px",borderRadius:8,cursor:"pointer",marginBottom:1,background:isActive?"#E0E5E4":"transparent",color:isActive?"#161A18":"#525C59",fontWeight:500,fontSize:13}}>
+          <i className={it.icon} style={{fontSize:15,color:isActive?"#1A6251":"#9AA3A1"}}></i>
+          <span style={{flex:1}}>{it.label}</span>
+          {it.badge&&<span style={{fontSize:11,color:"#9AA3A1"}}>{it.badge}</span>}
+        </div>;
+      })}
+
+      {/* SUB-ITEMS under Reports */}
+      <div style={{marginTop:4,marginBottom:4}}>
+        {[
+          {key:"mine",      icon:"ri-user-3-line",     label:"My reports",     badge:"12"},
+          {key:"shared",    icon:"ri-team-line",       label:"Shared with me", badge:"18"},
+          {key:"favorites", icon:"ri-star-line",       label:"Favorites",      badge:"5"},
+          {key:"trash",     icon:"ri-delete-bin-line", label:"Trash",          badge:"3"},
+        ].map(it=>{
+          const isActive=active===it.key;
+          return <div key={it.key} onClick={()=>onNavigate(it.key)}
+            style={{display:"flex",alignItems:"center",gap:9,height:32,padding:"0 10px 0 24px",borderRadius:7,cursor:"pointer",marginBottom:1,background:isActive?"#E0E5E4":"transparent",color:isActive?"#161A18":"#525C59",fontSize:13,fontWeight:isActive?500:400}}>
+            <i className={it.icon} style={{fontSize:14,color:isActive?"#1A6251":"#9AA3A1"}}></i>
+            <span style={{flex:1}}>{it.label}</span>
+            <span style={{fontSize:11,color:"#9AA3A1"}}>{it.badge}</span>
+          </div>;
+        })}
+      </div>
+
+      {/* Folders */}
+      <div style={{marginTop:12}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 10px 6px"}}>
+          <span style={{fontSize:11,fontWeight:500,color:"#9AA3A1",letterSpacing:"0.06em",textTransform:"uppercase"}}>FOLDERS</span>
+          <button style={{width:18,height:18,display:"grid",placeItems:"center",background:"transparent",border:0,cursor:"pointer",color:"#9AA3A1"}}><i className="ri-add-line" style={{fontSize:13}}></i></button>
+        </div>
+        {folders.map(f=>{
+          const isActive=active===f.key;
+          return <div key={f.key} onClick={()=>onNavigate(f.key)}
+            style={{display:"flex",alignItems:"center",gap:9,height:30,padding:"0 10px",borderRadius:7,cursor:"pointer",marginBottom:1,background:f.highlight?"#EBF5F2":(isActive?"#E0E5E4":"transparent"),color:"#161A18",fontSize:13,fontWeight:f.highlight?500:400}}>
+            <i className="ri-folder-line" style={{fontSize:14,color:f.highlight?"#207460":"#9AA3A1"}}></i>
+            <span style={{flex:1}}>{f.label}</span>
+            <span style={{fontSize:11,color:"#9AA3A1"}}>{f.count}</span>
+          </div>;
+        })}
+        <button style={{marginTop:6,width:"100%",height:28,padding:"0 10px",background:"transparent",border:"1px dashed #C4CBCA",borderRadius:7,display:"flex",alignItems:"center",gap:5,fontSize:12,color:"#767F7D",cursor:"pointer"}}>
+          <i className="ri-add-line" style={{fontSize:12}}></i> New folder
+        </button>
+      </div>
+    </div>
+  </aside>;
+}
+
+// ─── MOCK DATA ────────────────────────────────────────────────
+const A_DASHBOARDS = [
+  {id:"exec",name:"Exec MBR-Lite",reports:8,updated:"2h ago",by:"Sophia Chen"},
+  {id:"spend",name:"FY26 Spend Tracking",reports:5,updated:"Yesterday",by:"Sophia Chen"},
+  {id:"lottery",name:"H-1B Lottery Command",reports:12,updated:"3d ago",by:"Marcus Lee"},
+  {id:"outcomes",name:"Approvals & RFEs",reports:6,updated:"1w ago",by:"Priya Raman"},
+  {id:"renewal",name:"Renewals & Expirations",reports:4,updated:"1w ago",by:"Marcus Lee"},
+];
+const A_REPORTS = [
+  {id:"r1",name:"Cases filed by type",type:"Grouped Count",updated:"2h ago",by:"Sophia Chen",icon:"ri-bar-chart-2-line"},
+  {id:"r2",name:"Total fees by quarter",type:"Count Over Time",updated:"Yesterday",by:"Sophia Chen",icon:"ri-line-chart-line"},
+  {id:"r3",name:"Active cases by Business Unit",type:"Grouped Count",updated:"3d ago",by:"Marcus Lee",icon:"ri-bar-chart-horizontal-fill"},
+  {id:"r4",name:"Total Active Cases",type:"Summary KPI",updated:"Live",by:"Sophia Chen",icon:"ri-number-1"},
+  {id:"r5",name:"RFE rate by attorney",type:"Table",updated:"5d ago",by:"Priya Raman",icon:"ri-table-line"},
+  {id:"r6",name:"Beneficiaries with EAD expiring 90d",type:"List",updated:"1d ago",by:"Marcus Lee",icon:"ri-list-check-2"},
+  {id:"r7",name:"PERM stage durations",type:"Count Over Time",updated:"1w ago",by:"Priya Raman",icon:"ri-line-chart-line"},
+  {id:"r8",name:"Premium processing by case type",type:"Grouped Count",updated:"2w ago",by:"Sophia Chen",icon:"ri-bar-chart-2-line"},
+  {id:"r9",name:"Headcount by visa type",type:"Grouped Count",updated:"2w ago",by:"Marcus Lee",icon:"ri-bar-chart-2-line"},
+  {id:"r10",name:"Cases pending decision",type:"List",updated:"Yesterday",by:"Sophia Chen",icon:"ri-list-check-2"},
+];
+const F_TEMPLATES = {
+  population:[
+    {id:"p1",name:"Headcount by visa type",desc:"How many sponsored employees by visa category?",type:"Grouped Count"},
+    {id:"p2",name:"Beneficiaries by Business Unit",desc:"Which departments hold the most active sponsorships?",type:"Grouped Count"},
+    {id:"p3",name:"EAD/AP renewals due in 90 days",desc:"Who needs to file renewals this quarter?",type:"List"},
+    {id:"p4",name:"HRIS sync coverage",desc:"What share of beneficiaries are connected to the HRIS?",type:"Summary KPI"},
+  ],
+  spend:[
+    {id:"s1",name:"Total fees by quarter",desc:"How much have we spent on immigration this fiscal year?",type:"Count Over Time"},
+    {id:"s2",name:"Spend by Business Unit",desc:"Which department is driving the most fees?",type:"Grouped Count"},
+    {id:"s3",name:"Premium processing usage",desc:"How often are we paying premium processing, and on what?",type:"Grouped Count"},
+    {id:"s4",name:"Average fees per case type",desc:"What does an H-1B vs L-1 vs PERM cost on average?",type:"Table"},
+  ],
+  outcomes:[
+    {id:"o1",name:"Approval rate by case type",desc:"How are we performing across visa categories?",type:"Table"},
+    {id:"o2",name:"RFE rate by attorney",desc:"Which attorneys are getting the most RFEs?",type:"Table"},
+    {id:"o3",name:"Lottery selection rate",desc:"What is our H-1B cap selection rate over time?",type:"Count Over Time"},
+  ],
+  timelines:[
+    {id:"t1",name:"Avg time to filing",desc:"How long from kickoff to USCIS receipt?",type:"Summary KPI"},
+    {id:"t2",name:"PERM stage durations",desc:"Where are PERM cases spending the most time?",type:"Count Over Time"},
+    {id:"t3",name:"Cases pending decision >90d",desc:"Which cases have been with USCIS too long?",type:"List"},
+  ],
+  vendor:[
+    {id:"v1",name:"Cases per attorney",desc:"How is workload distributed across the legal team?",type:"Grouped Count"},
+    {id:"v2",name:"Time-to-completion by attorney",desc:"Who is fastest from kickoff to filing?",type:"Table"},
+  ],
+};
+const F_CATEGORIES = [
+  {id:"population",label:"Population",icon:"ri-team-line"},
+  {id:"spend",label:"Spend",icon:"ri-money-dollar-circle-line"},
+  {id:"outcomes",label:"Outcomes",icon:"ri-checkbox-circle-line"},
+  {id:"timelines",label:"Timelines",icon:"ri-time-line"},
+  {id:"vendor",label:"Vendor Performance",icon:"ri-user-star-line"},
+];
+
+// ─── CARD MENU ────────────────────────────────────────────────
+function CardMenu({ items }) {
+  const [open, setOpen] = useState(false);
+  return <div style={{position:"relative"}} onClick={(e)=>e.stopPropagation()}>
+    <button onClick={()=>setOpen(!open)} style={{width:26,height:26,display:"grid",placeItems:"center",background:open?"#F5F7F6":"transparent",border:0,borderRadius:6,color:"#525C59",cursor:"pointer",fontSize:16}}><i className="ri-more-2-fill"></i></button>
+    {open&&<><div style={{position:"fixed",inset:0,zIndex:10}} onClick={()=>setOpen(false)}/><div style={{position:"absolute",right:0,top:30,background:"#fff",border:"1px solid #E0E5E4",borderRadius:8,boxShadow:"0 8px 24px rgba(10,13,20,0.10)",padding:4,minWidth:160,zIndex:11}}>
+      {items.map(it=><button key={it} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",background:"transparent",border:0,borderRadius:6,fontSize:13,color:it==="Delete"?"#DC455A":"#161A18",cursor:"pointer",textAlign:"left",fontFamily:"Inter,system-ui"}} onMouseEnter={(e)=>e.currentTarget.style.background="#F5F7F6"} onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}><i className={it==="Edit"?"ri-pencil-line":it==="Duplicate"?"ri-file-copy-line":it==="Delete"?"ri-delete-bin-line":"ri-add-circle-line"} style={{fontSize:14,color:it==="Delete"?"#DC455A":"#9AA3A1"}}></i>{it}</button>)}
+    </div></>}
+  </div>;
+}
+
+// ─── TYPE COLORS ──────────────────────────────────────────────
+const TYPE_COLORS = {
+  "Grouped Count":   {bg:"#EBF5F2",fg:"#1A6251"},
+  "Count Over Time": {bg:"#E1F3FF",fg:"#0072CC"},
+  "Summary KPI":     {bg:"#FEF2E6",fg:"#B87428"},
+  "List":            {bg:"#EFF2F1",fg:"#525C59"},
+  "Table":           {bg:"#F0EAFF",fg:"#5A3FB0"},
+};
+
+// ─── REPORT CARD ──────────────────────────────────────────────
+function ReportCard({ r }) {
+  const [hover, setHover] = useState(false);
+  const tc = TYPE_COLORS[r.type]||{bg:"#EFF2F1",fg:"#525C59"};
+  return <div onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+    style={{background:"#fff",border:"1px solid #E0E5E4",borderRadius:12,padding:16,cursor:"pointer",boxShadow:hover?"0 4px 12px rgba(10,13,20,0.06)":"0 1px 2px rgba(10,13,20,0.03)",transition:"box-shadow 120ms",display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+      <div style={{width:36,height:36,borderRadius:8,background:tc.bg,color:tc.fg,display:"grid",placeItems:"center",fontSize:18}}><i className={r.icon}></i></div>
+      <CardMenu items={["Edit","Add to dashboard","Duplicate","Delete"]}/>
+    </div>
+    <div>
+      <div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:14,color:"#161A18",letterSpacing:"-0.005em",lineHeight:"20px",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{r.name}</div>
+      <span style={{display:"inline-flex",marginTop:6,padding:"2px 8px",borderRadius:4,background:tc.bg,color:tc.fg,fontSize:11,fontWeight:500}}>{r.type}</span>
+    </div>
+    <div style={{fontSize:11,color:"#767F7D",display:"flex",alignItems:"center",gap:6,marginTop:"auto"}}><span>{r.updated}</span><span style={{color:"#C4CBCA"}}>·</span><span>{r.by}</span></div>
+  </div>;
+}
+
+// ─── DASHBOARD CARD ───────────────────────────────────────────
+function DashboardCard({ d, onClick }) {
+  const [hover, setHover] = useState(false);
+  return <div onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} onClick={onClick}
+    style={{flex:"0 0 260px",scrollSnapAlign:"start",background:"#fff",border:"1px solid #E0E5E4",borderRadius:12,padding:18,cursor:"pointer",boxShadow:hover?"0 4px 12px rgba(10,13,20,0.06)":"0 1px 2px rgba(10,13,20,0.03)",transition:"box-shadow 120ms"}}>
+    <div style={{height:60,marginBottom:14,background:"linear-gradient(180deg,#EBF5F2 0%,#F5F7F6 100%)",borderRadius:8,padding:10,display:"flex",alignItems:"flex-end",gap:4}}>
+      {[40,65,50,80,55,70,95,60].map((h,i)=><div key={i} style={{flex:1,height:`${h}%`,background:i===6?"#207460":"#7AB5A6",borderRadius:"2px 2px 0 0",opacity:0.85}}></div>)}
+    </div>
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+      <div style={{minWidth:0,flex:1}}>
+        <div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:14,color:"#161A18",letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.name}</div>
+        <div style={{fontSize:12,color:"#525C59",marginTop:3}}><i className="ri-bar-chart-2-line" style={{fontSize:12,marginRight:4,color:"#9AA3A1"}}></i>{d.reports} reports</div>
+        <div style={{fontSize:11,color:"#767F7D",marginTop:6,display:"flex",alignItems:"center",gap:5}}><span>Updated {d.updated}</span><span style={{color:"#C4CBCA"}}>·</span><span>{d.by}</span></div>
+      </div>
+      <CardMenu items={["Edit","Duplicate","Delete"]}/>
+    </div>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCREEN D — ANALYTICS HOME (POPULATED)
+// Combined view: Dashboards row + Reports grid
+// Matches the screenshot exactly
+// ═══════════════════════════════════════════════════════════════
+function PageHeader({ navigate }) {
+  return <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:24,padding:"22px 32px 18px",background:"#fff",borderBottom:"1px solid #EFF2F1"}}>
+    <div>
+      <h1 style={{fontFamily:"'Inter Display',Inter",fontSize:32,lineHeight:"40px",letterSpacing:"-0.015em",fontWeight:500,color:"#161A18",margin:0}}>Analytics</h1>
+      <p style={{fontSize:13,lineHeight:"20px",color:"#525C59",margin:"3px 0 0"}}>Reports and dashboards across your immigration program.</p>
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:8,paddingTop:4}}>
+      <div style={{position:"relative"}}>
+        <i className="ri-search-line" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#9AA3A1",fontSize:14}}></i>
+        <input placeholder="Search reports and dashboards..." style={{width:260,height:34,padding:"0 10px 0 32px",background:"#F5F7F6",border:"1px solid #E0E5E4",borderRadius:8,fontSize:13,color:"#161A18",outline:"none",fontFamily:"Inter,system-ui"}}/>
+      </div>
+      <Button variant="secondary" size="sm" icon="ri-dashboard-2-line" onClick={()=>navigate("new-dashboard")}>New Dashboard</Button>
+      <Button variant="primary" size="sm" icon="ri-add-line" onClick={()=>navigate("builder")}>New Report</Button>
+    </div>
+  </div>;
+}
+
+function DashboardsRow({ navigate }) {
+  return <div style={{padding:"22px 32px 0"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+      <h2 style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:18,color:"#161A18",margin:0,letterSpacing:"-0.005em"}}>Dashboards</h2>
+      <button style={{background:"none",border:0,padding:0,cursor:"pointer",color:"#1A6251",fontSize:13,fontWeight:500,fontFamily:"Inter,system-ui",display:"inline-flex",alignItems:"center",gap:4}}>View all <i className="ri-arrow-right-line"></i></button>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:14,marginRight:0}}>
+      {A_DASHBOARDS.map(d=><DashboardCard key={d.id} d={d} onClick={()=>navigate("dashboard-canvas")}/>)}
+      {/* New dashboard card */}
+      <div onClick={()=>navigate("new-dashboard")}
+        style={{background:"transparent",border:"1.5px dashed #C4CBCA",borderRadius:12,padding:18,cursor:"pointer",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",minHeight:168,gap:8,transition:"all 120ms"}}
+        onMouseEnter={(e)=>{e.currentTarget.style.borderColor="#207460";e.currentTarget.style.background="#EBF5F2";}}
+        onMouseLeave={(e)=>{e.currentTarget.style.borderColor="#C4CBCA";e.currentTarget.style.background="transparent";}}>
+        <div style={{width:34,height:34,borderRadius:8,background:"#EBF5F2",color:"#1A6251",display:"grid",placeItems:"center",fontSize:18}}><i className="ri-add-line"></i></div>
+        <div style={{fontSize:13,fontWeight:500,color:"#161A18"}}>New dashboard</div>
+        <div style={{fontSize:12,color:"#767F7D"}}>Group reports for review</div>
+      </div>
+    </div>
+  </div>;
+}
+
+function ReportsGrid({ navigate, showNewCard=true }) {
+  return <div style={{padding:"28px 32px 60px"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+      <h2 style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:18,color:"#161A18",margin:0,letterSpacing:"-0.005em"}}>Reports <span style={{color:"#9AA3A1",fontWeight:400,fontSize:16}}>· {A_REPORTS.length}</span></h2>
+      <div style={{display:"flex",gap:6}}>
+        <button style={{height:30,padding:"0 10px",background:"#fff",border:"1px solid #E0E5E4",borderRadius:6,fontSize:12,color:"#161A18",fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}><i className="ri-filter-3-line" style={{fontSize:13,color:"#525C59"}}></i> All types</button>
+        <button style={{height:30,padding:"0 10px",background:"#fff",border:"1px solid #E0E5E4",borderRadius:6,fontSize:12,color:"#525C59",cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}><i className="ri-sort-desc" style={{fontSize:13}}></i> Recently updated</button>
+      </div>
+    </div>
+    <div style={{display:"grid",gap:14,gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))"}}>
+      {A_REPORTS.map(r=><ReportCard key={r.id} r={r}/>)}
+      {showNewCard&&<div onClick={()=>navigate("builder")}
+        style={{border:"1.5px dashed #C4CBCA",borderRadius:12,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",minHeight:160,transition:"all 120ms"}}
+        onMouseEnter={(e)=>{e.currentTarget.style.borderColor="#207460";e.currentTarget.style.background="#EBF5F2";}}
+        onMouseLeave={(e)=>{e.currentTarget.style.borderColor="#C4CBCA";e.currentTarget.style.background="transparent";}}>
+        <div style={{width:32,height:32,borderRadius:8,background:"#EBF5F2",color:"#1A6251",display:"grid",placeItems:"center",fontSize:18}}><i className="ri-add-line"></i></div>
+        <div style={{fontSize:13,fontWeight:500,color:"#161A18"}}>New Report</div>
+      </div>}
+    </div>
+  </div>;
+}
+
+function ScreenD({ navigate }) {
+  return <div style={{flex:1,overflowY:"auto",background:"#FCFDFC"}}>
+    <PageHeader navigate={navigate}/>
+    <DashboardsRow navigate={navigate}/>
+    <ReportsGrid navigate={navigate}/>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCREEN E — ANALYTICS EMPTY
+// ═══════════════════════════════════════════════════════════════
+function ScreenE({ navigate }) {
+  return <div style={{flex:1,display:"flex",flexDirection:"column",background:"#FCFDFC"}}>
+    <PageHeader navigate={navigate}/>
+    <div style={{flex:1,display:"grid",placeItems:"center",padding:"40px 32px 80px"}}>
+      <div style={{textAlign:"center",maxWidth:400}}>
+        <svg viewBox="0 0 200 140" style={{width:180,height:126,marginBottom:16}}>
+          <rect x="20" y="30" width="160" height="100" rx="12" fill="#F5F7F6" stroke="#E0E5E4"/>
+          <rect x="36" y="86" width="20" height="32" rx="3" fill="#A8D0C5"/>
+          <rect x="64" y="68" width="20" height="50" rx="3" fill="#7AB5A6"/>
+          <rect x="92" y="56" width="20" height="62" rx="3" fill="#4D9A88"/>
+          <rect x="120" y="76" width="20" height="42" rx="3" fill="#207460"/>
+          <rect x="148" y="92" width="20" height="26" rx="3" fill="#A8D0C5"/>
+          <circle cx="160" cy="20" r="14" fill="#FFF5D1" stroke="#F8E59A"/>
+          <text x="160" y="26" fontSize="16" textAnchor="middle" fill="#886600" fontFamily="Inter" fontWeight="500">+</text>
+        </svg>
+        <h2 style={{fontFamily:"'Inter Display',Inter",fontSize:22,letterSpacing:"-0.01em",fontWeight:500,color:"#161A18",margin:0}}>No reports yet</h2>
+        <p style={{fontSize:14,lineHeight:"22px",color:"#525C59",margin:"6px 0 20px"}}>Start with a pre-built template or build from scratch.</p>
+        <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+          <Button variant="secondary" icon="ri-stack-line" onClick={()=>navigate("templates")}>Browse templates</Button>
+          <Button variant="primary" icon="ri-add-line" onClick={()=>navigate("builder")}>Create report</Button>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── Reports-only view (when "Reports" tab is active in the nav) ──
+function ScreenReports({ navigate }) {
+  return <div style={{flex:1,overflowY:"auto",background:"#FCFDFC"}}>
+    <PageHeader navigate={navigate}/>
+    <ReportsGrid navigate={navigate}/>
+  </div>;
+}
+
+// ── Dashboards-only view (when "Dashboards" tab is active) ──
+function ScreenDashboardsGrid({ navigate }) {
+  return <div style={{flex:1,overflowY:"auto",background:"#FCFDFC"}}>
+    <PageHeader navigate={navigate}/>
+    <div style={{padding:"22px 32px 60px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+        <h2 style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:18,color:"#161A18",margin:0,letterSpacing:"-0.005em"}}>Dashboards <span style={{color:"#9AA3A1",fontWeight:400,fontSize:16}}>· {A_DASHBOARDS.length}</span></h2>
+        <Button variant="secondary" size="sm" icon="ri-dashboard-2-line" onClick={()=>navigate("new-dashboard")}>New Dashboard</Button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:14}}>
+        {A_DASHBOARDS.map(d=><DashboardCard key={d.id} d={d} onClick={()=>navigate("dashboard-canvas")}/>)}
+        <div onClick={()=>navigate("new-dashboard")}
+          style={{background:"transparent",border:"1.5px dashed #C4CBCA",borderRadius:12,padding:18,cursor:"pointer",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",minHeight:168,gap:8,transition:"all 120ms"}}
+          onMouseEnter={(e)=>{e.currentTarget.style.borderColor="#207460";e.currentTarget.style.background="#EBF5F2";}}
+          onMouseLeave={(e)=>{e.currentTarget.style.borderColor="#C4CBCA";e.currentTarget.style.background="transparent";}}>
+          <div style={{width:34,height:34,borderRadius:8,background:"#EBF5F2",color:"#1A6251",display:"grid",placeItems:"center",fontSize:18}}><i className="ri-add-line"></i></div>
+          <div style={{fontSize:13,fontWeight:500,color:"#161A18"}}>New dashboard</div>
+          <div style={{fontSize:12,color:"#767F7D"}}>Group reports for review</div>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCREEN F — TEMPLATE LIBRARY
+// Now a full page within the analytics layout, not a separate overlay
+// ═══════════════════════════════════════════════════════════════
+function ScreenF({ navigate, activeCat, onCatChange }) {
+  const [selected, setSelected] = useState(F_TEMPLATES[activeCat||"population"][0]);
+
+  useEffect(()=>{ setSelected(F_TEMPLATES[activeCat||"population"][0]); }, [activeCat]);
+
+  const cat = activeCat || "population";
+  const templates = F_TEMPLATES[cat]||[];
+  const catInfo = F_CATEGORIES.find(c=>c.id===cat)||F_CATEGORIES[0];
+  const typeIcons = {"Grouped Count":"ri-bar-chart-2-line","Count Over Time":"ri-line-chart-line","Summary KPI":"ri-number-1","List":"ri-list-check-2","Table":"ri-table-line"};
+
+  return <div style={{flex:1,display:"flex",minHeight:0,height:"100vh"}}>
+    {/* Template grid */}
+    <div style={{flex:1,overflowY:"auto",padding:"24px 28px 60px"}}>
+      {/* Header */}
+      <div style={{marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+          <div style={{width:28,height:28,borderRadius:7,background:"#EBF5F2",color:"#1A6251",display:"grid",placeItems:"center",fontSize:14}}><i className={catInfo.icon}></i></div>
+          <h1 style={{fontFamily:"'Inter Display',Inter",fontSize:22,fontWeight:500,color:"#161A18",letterSpacing:"-0.01em",margin:0}}>{catInfo.label}</h1>
+          <span style={{fontSize:13,color:"#9AA3A1"}}>· {templates.length} templates</span>
+        </div>
+        <p style={{fontSize:13,color:"#525C59",margin:0,lineHeight:1.6}}>Pre-built reports for your immigration program. Select one to preview, then use it as a starting point.</p>
+      </div>
+      {/* Template cards */}
+      <div style={{display:"grid",gap:14,gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))"}}>
+        {templates.map(t=>{
+          const tc = TYPE_COLORS[t.type]||{bg:"#EFF2F1",fg:"#525C59"};
+          const isSelected = selected&&selected.id===t.id;
+          return <button key={t.id} onClick={()=>setSelected(t)} style={{position:"relative",textAlign:"left",fontFamily:"Inter,system-ui",background:"#fff",border:`1.5px solid ${isSelected?"#207460":"#E0E5E4"}`,borderRadius:12,padding:16,cursor:"pointer",boxShadow:isSelected?"0 4px 12px rgba(32,116,96,0.1)":"0 1px 2px rgba(10,13,20,0.03)",transition:"all 120ms",display:"flex",flexDirection:"column",gap:12,minHeight:144}}>
+            <div style={{width:36,height:36,borderRadius:8,background:tc.bg,color:tc.fg,display:"grid",placeItems:"center",fontSize:18}}><i className={typeIcons[t.type]||"ri-bar-chart-2-line"}></i></div>
+            <div style={{flex:1}}><div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:14,color:"#161A18",lineHeight:"20px"}}>{t.name}</div><div style={{fontSize:12,color:"#525C59",lineHeight:"18px",marginTop:4}}>{t.desc}</div></div>
+            <span style={{display:"inline-flex",alignSelf:"flex-start",padding:"2px 8px",borderRadius:4,background:tc.bg,color:tc.fg,fontSize:11,fontWeight:500}}>{t.type}</span>
+            {isSelected&&<span style={{position:"absolute",top:12,right:12,width:20,height:20,borderRadius:999,background:"#207460",color:"#fff",display:"grid",placeItems:"center",fontSize:11}}><i className="ri-check-line"></i></span>}
+          </button>;
+        })}
+      </div>
+    </div>
+    {/* Preview rail */}
+    {selected&&<div style={{width:340,flex:"0 0 340px",borderLeft:"1px solid #E0E5E4",background:"#fff",padding:"20px 22px",overflowY:"auto",display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{fontSize:10,color:"#9AA3A1",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:500}}>Selected template</div>
+      <div>
+        <h3 style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:17,color:"#161A18",margin:0,letterSpacing:"-0.005em"}}>{selected.name}</h3>
+        <p style={{fontSize:13,color:"#525C59",lineHeight:"20px",margin:"6px 0 0"}}>{selected.desc}</p>
+        <span style={{display:"inline-flex",marginTop:10,padding:"2px 8px",borderRadius:4,background:"#EBF5F2",color:"#1A6251",fontSize:11,fontWeight:500}}>{selected.type}</span>
+      </div>
+      <div style={{background:"#FCFDFC",border:"1px solid #E0E5E4",borderRadius:10,padding:14}}>
+        <div style={{fontSize:11,color:"#767F7D",marginBottom:8,fontWeight:500}}>Sample output</div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:6,height:100}}>
+          {[55,78,42,90,64,72,58].map((h,i)=><div key={i} style={{flex:1,height:`${h}%`,background:["#207460","#4D9A88","#7AB5A6","#A8D0C5","#D88F4E","#F2BA77","#048AF5"][i],borderRadius:"3px 3px 0 0"}}></div>)}
+        </div>
+      </div>
+      <div style={{background:"#F5F7F6",borderRadius:10,padding:12,fontSize:12,color:"#525C59",lineHeight:"18px"}}>
+        <div style={{fontWeight:500,color:"#313836",marginBottom:5}}>What you get</div>
+        <div>· Pre-configured fields and grouping</div>
+        <div>· Sensible default timeframe and filters</div>
+        <div>· Works on your live data immediately</div>
+        <div>· Fully editable after creation</div>
+      </div>
+      <div style={{display:"flex",gap:8,marginTop:"auto"}}>
+        <Button variant="secondary" style={{flex:1}} onClick={()=>navigate("builder")}>Customize</Button>
+        <Button variant="primary" style={{flex:1}} icon="ri-magic-line" onClick={()=>navigate("builder")}>Use template</Button>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCREEN: NEW DASHBOARD — creation modal over the analytics page
+// ═══════════════════════════════════════════════════════════════
+function NewDashboardModal({ onClose, onCreate }) {
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [visibility, setVisibility] = useState("shared");
+  const canCreate = name.trim().length > 0;
+
+  return <div style={{position:"fixed",inset:0,zIndex:50,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    {/* backdrop */}
+    <div style={{position:"absolute",inset:0,background:"rgba(22,26,24,0.4)",backdropFilter:"blur(2px)"}} onClick={onClose}/>
+    {/* modal */}
+    <div style={{position:"relative",background:"#fff",borderRadius:14,width:480,boxShadow:"0 24px 48px rgba(10,13,20,0.16)",overflow:"hidden",zIndex:1}}>
+      {/* header */}
+      <div style={{padding:"22px 24px 18px",borderBottom:"1px solid #EFF2F1"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
+          <div>
+            <h2 style={{fontFamily:"'Inter Display',Inter",fontSize:18,fontWeight:500,color:"#161A18",margin:0,letterSpacing:"-0.005em"}}>Create dashboard</h2>
+            <p style={{fontSize:13,color:"#525C59",margin:"4px 0 0",lineHeight:"18px"}}>Dashboards group related reports into a single view for sharing with leadership.</p>
+          </div>
+          <button onClick={onClose} style={{width:28,height:28,display:"grid",placeItems:"center",background:"transparent",border:"1px solid #E0E5E4",borderRadius:7,cursor:"pointer",color:"#525C59",fontSize:16,flexShrink:0,marginLeft:12}}><i className="ri-close-line"></i></button>
+        </div>
+      </div>
+      {/* body */}
+      <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:18}}>
+        {/* Name */}
+        <div>
+          <label style={{fontSize:12,fontWeight:600,color:"#525C59",display:"block",marginBottom:6}}>Dashboard name <span style={{color:"#E55767"}}>*</span></label>
+          <input value={name} onChange={(e)=>setName(e.target.value)}
+            placeholder="e.g. Immigration MBR — Q3 2026"
+            autoFocus
+            style={{width:"100%",height:36,padding:"0 12px",borderRadius:7,border:`1px solid ${name?"#A8D0C5":"#E0E5E4"}`,fontSize:13,color:"#161A18",outline:"none",fontFamily:"Inter,system-ui",transition:"border-color 120ms"}}
+            onFocus={(e)=>e.target.style.borderColor="#A8D0C5"}
+            onBlur={(e)=>e.target.style.borderColor=name?"#A8D0C5":"#E0E5E4"}/>
+          <div style={{fontSize:11,color:"#9AA3A1",marginTop:4}}>This will be the title shown on the dashboard and in report cards.</div>
+        </div>
+        {/* Description */}
+        <div>
+          <label style={{fontSize:12,fontWeight:600,color:"#525C59",display:"block",marginBottom:6}}>Description <span style={{color:"#9AA3A1",fontWeight:400}}>(optional)</span></label>
+          <textarea value={desc} onChange={(e)=>setDesc(e.target.value)}
+            placeholder="Describe what this dashboard covers and who it's for..."
+            style={{width:"100%",minHeight:72,padding:"9px 12px",borderRadius:7,border:"1px solid #E0E5E4",fontSize:13,color:"#161A18",outline:"none",fontFamily:"Inter,system-ui",resize:"vertical",lineHeight:"18px"}}
+            onFocus={(e)=>e.target.style.borderColor="#A8D0C5"}
+            onBlur={(e)=>e.target.style.borderColor="#E0E5E4"}/>
+        </div>
+        {/* Visibility */}
+        <div>
+          <label style={{fontSize:12,fontWeight:600,color:"#525C59",display:"block",marginBottom:6}}>Visibility</label>
+          <div style={{display:"flex",gap:8}}>
+            {[{v:"private",icon:"ri-lock-line",label:"Private",desc:"Only you can see this"},{v:"shared",icon:"ri-team-line",label:"Shared with team",desc:"Everyone on Alma can view"}].map(opt=>{
+              const isActive = visibility===opt.v;
+              return <button key={opt.v} onClick={()=>setVisibility(opt.v)} style={{flex:1,padding:"10px 12px",border:`1.5px solid ${isActive?"#207460":"#E0E5E4"}`,borderRadius:8,background:isActive?"#F5F7F6":"#fff",cursor:"pointer",textAlign:"left",transition:"all 120ms",display:"flex",alignItems:"flex-start",gap:8}}>
+                <i className={opt.icon} style={{fontSize:16,color:isActive?"#207460":"#9AA3A1",marginTop:1}}></i>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:isActive?"#161A18":"#313836"}}>{opt.label}</div>
+                  <div style={{fontSize:11,color:"#767F7D",marginTop:1}}>{opt.desc}</div>
+                </div>
+                {isActive&&<span style={{marginLeft:"auto",width:16,height:16,borderRadius:999,background:"#207460",display:"grid",placeItems:"center"}}><i className="ri-check-line" style={{fontSize:10,color:"#fff"}}></i></span>}
+              </button>;
+            })}
+          </div>
+        </div>
+      </div>
+      {/* footer */}
+      <div style={{padding:"14px 24px 20px",borderTop:"1px solid #EFF2F1",display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" icon="ri-dashboard-2-line" disabled={!canCreate} onClick={()=>{ if(canCreate) onCreate(name,desc,visibility); }}>Create dashboard</Button>
+      </div>
+    </div>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCREEN: DASHBOARD CANVAS (populated)
+// Styled like the Volume template — full KPI row, real charts,
+// horizontal bars, AI insights panel. All at proper reading scale.
+// ═══════════════════════════════════════════════════════════════
+
+// ── Data ──────────────────────────────────────────────────────
+const DASH_MONTHS = ["Jun '25","Jul '25","Aug '25","Sep '25","Oct '25","Nov '25","Dec '25","Jan '26","Feb '26","Mar '26","Apr '26","May '26"];
+const DASH_FILED = [
+  {label:"Jun '25", values:{"H-1B":8,"TN":3,"L-1A":1,"O-1A":2,"PERM":4,"EB-2 NIW":1,"Other":1}},
+  {label:"Jul '25", values:{"H-1B":6,"TN":4,"L-1A":2,"O-1A":1,"PERM":5,"EB-2 NIW":2}},
+  {label:"Aug '25", values:{"H-1B":5,"TN":2,"L-1A":1,"PERM":3,"EB-2 NIW":1,"Other":1}},
+  {label:"Sep '25", values:{"H-1B":9,"TN":5,"L-1A":2,"O-1A":3,"PERM":6,"EB-2 NIW":2,"Other":1}},
+  {label:"Oct '25", values:{"H-1B":11,"TN":4,"L-1A":3,"O-1A":2,"PERM":7,"EB-2 NIW":3}},
+  {label:"Nov '25", values:{"H-1B":7,"TN":3,"L-1A":2,"O-1A":1,"PERM":5,"EB-2 NIW":2,"Other":1}},
+  {label:"Dec '25", values:{"H-1B":4,"TN":2,"L-1A":1,"O-1A":1,"PERM":3,"EB-2 NIW":1}},
+  {label:"Jan '26", values:{"H-1B":14,"H-1B Lottery":22,"TN":6,"L-1A":3,"O-1A":4,"PERM":9,"EB-2 NIW":4,"Other":2}},
+  {label:"Feb '26", values:{"H-1B":12,"TN":5,"L-1A":4,"O-1A":3,"PERM":8,"EB-2 NIW":3,"Other":1}},
+  {label:"Mar '26", values:{"H-1B":18,"H-1B Lottery":8,"TN":6,"L-1A":4,"O-1A":4,"PERM":11,"EB-2 NIW":5,"Other":2}},
+  {label:"Apr '26", values:{"H-1B":13,"TN":5,"L-1A":3,"O-1A":3,"PERM":9,"EB-2 NIW":4,"Other":1}},
+  {label:"May '26", values:{"H-1B":9,"TN":4,"L-1A":2,"O-1A":2,"PERM":6,"EB-2 NIW":3,"Other":1}},
+];
+const DASH_SERIES = [
+  {key:"H-1B Lottery",color:"#4D9A88",label:"H-1B Lottery"},
+  {key:"H-1B",color:"#207460",label:"H-1B"},
+  {key:"PERM",color:"#13673E",label:"PERM"},
+  {key:"TN",color:"#7AB5A6",label:"TN"},
+  {key:"L-1A",color:"#F2BA77",label:"L-1A"},
+  {key:"O-1A",color:"#048AF5",label:"O-1A"},
+  {key:"EB-2 NIW",color:"#966EEE",label:"EB-2 NIW"},
+  {key:"Other",color:"#C4CBCA",label:"Other"},
+];
+const DASH_BU = [
+  {label:"Engineering",   sublabel:"98 H-1B · 31 PERM · 13 other", value:142},
+  {label:"Hardware",      sublabel:"54 H-1B · 21 PERM · 14 other", value:89},
+  {label:"Product",       sublabel:"32 H-1B · 11 PERM · 4 other",  value:47},
+  {label:"Sales",         sublabel:"12 H-1B · 18 TN · 8 other",    value:38},
+  {label:"Data & Analytics",sublabel:"26 H-1B · 6 PERM · 2 other", value:34},
+  {label:"Customer Eng",  sublabel:"14 H-1B · 5 TN · 3 other",     value:22},
+  {label:"Operations",    sublabel:"9 H-1B · 6 PERM · 3 other",    value:18},
+  {label:"Marketing",     sublabel:"6 H-1B · 3 TN · 2 other",      value:11},
+  {label:"Finance",       sublabel:"5 H-1B · 2 PERM · 1 other",    value:8},
+];
+
+// ── Stacked Bar Chart ─────────────────────────────────────────
+function DashStackedBar({ data, series, height=260 }) {
+  const [hover, setHover] = useState(null);
+  const W=860, H=height, padL=44, padR=12, padT=12, padB=26;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const totals = data.map(d=>series.reduce((s,k)=>s+(d.values[k.key]||0),0));
+  const maxRaw = Math.max(...totals,1);
+  const pow=Math.pow(10,Math.floor(Math.log10(maxRaw)));
+  const n=maxRaw/pow;
+  const max=(n<=1?1:n<=2?2:n<=5?5:10)*pow;
+  const barW=innerW/data.length*0.6;
+  const xC=i=>padL+(innerW/data.length)*(i+0.5);
+  const yS=v=>padT+innerH-(v/max)*innerH;
+  const yTicks=[0,20,40,60,80,100].filter(v=>v<=max);
+
+  return <div style={{position:"relative",width:"100%"}}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block",overflow:"visible"}}>
+      {yTicks.map(v=>{const y=yS(v);return<g key={v}>
+        <line x1={padL} x2={W-padR} y1={y} y2={y} stroke={v===0?"#C4CBCA":"#EFF2F1"} strokeWidth="1"/>
+        <text x={padL-8} y={y+4} fontSize="11" fill="#767F7D" textAnchor="end" fontFamily="Inter,system-ui">{v}</text>
+      </g>;})}
+      {data.map((d,i)=>{
+        let acc=0; const cx=xC(i);
+        return <g key={i} onMouseEnter={()=>setHover({i})} onMouseLeave={()=>setHover(null)}>
+          <rect x={cx-innerW/data.length/2} y={padT} width={innerW/data.length} height={innerH} fill="transparent"/>
+          {series.map((s,si)=>{
+            const v=d.values[s.key]||0; if(!v) return null;
+            const h=(v/max)*innerH, y=yS(acc+v); acc+=v;
+            const isFirst=si===0||series.slice(0,si).every(ss=>!d.values[ss.key]);
+            return <rect key={s.key} x={cx-barW/2} y={y} width={barW} height={h} fill={s.color} rx={isFirst?3:0} ry={isFirst?3:0} opacity={hover&&hover.i!==i?0.3:1}/>;
+          })}
+          {totals[i]>0&&<text x={cx} y={yS(totals[i])-5} fontSize="10" fill="#525C59" textAnchor="middle" fontFamily="Inter,system-ui" fontWeight="500">{totals[i]}</text>}
+          <text x={cx} y={H-6} fontSize="10" fill="#9AA3A1" textAnchor="middle" fontFamily="Inter,system-ui">{d.label}</text>
+        </g>;
+      })}
+    </svg>
+    {hover&&<div style={{position:"absolute",top:0,left:`${(xC(hover.i)/W)*100}%`,transform:"translate(-50%,-100%)",background:"#161A18",color:"#fff",padding:"8px 10px",borderRadius:8,fontSize:12,minWidth:150,boxShadow:"0 8px 24px rgba(0,0,0,0.18)",pointerEvents:"none",zIndex:10}}>
+      <div style={{fontWeight:500,marginBottom:4}}>{data[hover.i].label}</div>
+      {series.slice().reverse().map(s=>{const v=data[hover.i].values[s.key]||0;if(!v)return null;return<div key={s.key} style={{display:"flex",alignItems:"center",gap:6,justifyContent:"space-between"}}><span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:2,background:s.color}}></span>{s.label}</span><span style={{fontWeight:500,marginLeft:8}}>{v}</span></div>;})}
+    </div>}
+  </div>;
+}
+
+// ── Horizontal Bar Chart ──────────────────────────────────────
+function DashHBar({ data }) {
+  const max = Math.max(...data.map(d=>d.value),1);
+  const rowH=46, labelW=160, H=data.length*rowH;
+  return <svg viewBox={`0 0 860 ${H}`} style={{width:"100%",height:H,display:"block"}}>
+    {data.map((d,i)=>{
+      const y=i*rowH+4, trackX=labelW+8, trackW=860-labelW-60;
+      const w=(d.value/max)*trackW;
+      return <g key={i}>
+        <text x={labelW} y={y+18} textAnchor="end" fontSize="13" fill="#161A18" fontFamily="Inter,system-ui" fontWeight="500">{d.label}</text>
+        {d.sublabel&&<text x={labelW} y={y+32} textAnchor="end" fontSize="11" fill="#9AA3A1" fontFamily="Inter,system-ui">{d.sublabel}</text>}
+        <rect x={trackX} y={y+6} width={trackW} height={22} rx={3} fill="#F5F7F6"/>
+        <rect x={trackX} y={y+6} width={w} height={22} rx={3} fill="#207460"/>
+        <text x={trackX+w+8} y={y+21} fontSize="13" fill="#161A18" fontFamily="Inter,system-ui" fontWeight="500">{d.value}</text>
+      </g>;
+    })}
+  </svg>;
+}
+
+// ── KPI Card ──────────────────────────────────────────────────
+function DashKPI({ label, value, sub, delta, positive, breakdown }) {
+  return <div style={{background:"#fff",border:"1px solid #E0E5E4",borderRadius:12,padding:"18px 20px",flex:1,minWidth:0}}>
+    <div style={{fontSize:11,fontWeight:500,color:"#525C59",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      {label}<i className="ri-information-line" style={{color:"#C4CBCA",fontSize:14}}></i>
+    </div>
+    <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap",marginBottom:sub?4:0}}>
+      <div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:40,lineHeight:"48px",letterSpacing:"-0.02em",color:"#161A18"}}>{value}</div>
+      {delta&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 7px",borderRadius:6,fontSize:12,fontWeight:500,background:positive?"#E2F6E6":"#FFEAEB",color:positive?"#2E744C":"#DC455A"}}>
+        <i className={`ri-arrow-${positive?"up":"down"}-line`} style={{fontSize:12}}></i>{delta}
+      </span>}
+    </div>
+    {sub&&<div style={{fontSize:13,color:"#525C59",marginBottom:breakdown?12:0}}>{sub}</div>}
+    {breakdown&&<div style={{display:"flex",flexDirection:"column",gap:5,paddingTop:10,borderTop:"1px solid #EFF2F1"}}>
+      {breakdown.map((b,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,color:"#313836"}}><div style={{width:8,height:8,borderRadius:2,background:b.color}}></div><span>{b.label}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:80,height:6,background:"#F5F7F6",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:b.color,borderRadius:3,width:`${Math.round(b.value/431*100)}%`}}></div></div>
+          <span style={{fontWeight:500,color:"#161A18",minWidth:28,textAlign:"right"}}>{b.value}</span>
+        </div>
+      </div>)}
+    </div>}
+  </div>;
+}
+
+// ── Insight Card ──────────────────────────────────────────────
+function InsightCard({ n, title, body }) {
+  return <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+    <div style={{width:24,height:24,borderRadius:999,background:"#207460",color:"#fff",display:"grid",placeItems:"center",fontSize:12,fontWeight:600,flex:"0 0 24px",marginTop:1}}>{n}</div>
+    <div>
+      <div style={{fontSize:14,fontWeight:500,color:"#161A18",letterSpacing:"-0.005em",marginBottom:4}}>{title}</div>
+      <div style={{fontSize:13,color:"#525C59",lineHeight:"20px"}}>{body}</div>
+    </div>
+  </div>;
+}
+
+// ── Full Dashboard Screen ─────────────────────────────────────
+function ScreenDashboard({ name, navigate }) {
+  const [granularity, setGranularity] = useState("Monthly");
+  const totalFiled = DASH_FILED.reduce((s,m)=>s+Object.values(m.values).reduce((a,b)=>a+b,0),0);
+
+  return <div style={{flex:1,display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden"}}>
+    {/* Dashboard topbar */}
+    <div style={{background:"#fff",borderBottom:"1px solid #E0E5E4",padding:"0 28px",height:48,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:"#525C59"}}>
+        <span style={{cursor:"pointer"}} onClick={()=>navigate("reports")}>Analytics</span>
+        <i className="ri-arrow-right-s-line" style={{color:"#C4CBCA",fontSize:14}}></i>
+        <span style={{cursor:"pointer"}} onClick={()=>navigate("dashboard-canvas")}>Dashboards</span>
+        <i className="ri-arrow-right-s-line" style={{color:"#C4CBCA",fontSize:14}}></i>
+        <span style={{color:"#161A18",fontWeight:500}}>Immigration MBR</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <Button variant="secondary" size="sm" icon="ri-upload-2-line">Export</Button>
+        <Button variant="secondary" size="sm" icon="ri-share-line">Share</Button>
+        <Button variant="primary" size="sm" icon="ri-layout-grid-line" onClick={()=>navigate("builder")}>Add report</Button>
+      </div>
+    </div>
+
+    {/* Dashboard body */}
+    <div style={{flex:1,overflowY:"auto",background:"#FCFDFC"}}>
+      {/* Dashboard title row */}
+      <div style={{padding:"20px 32px 16px",background:"#fff",borderBottom:"1px solid #EFF2F1"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:999,background:"#EBF5F2",color:"#1A6251",fontSize:11,fontWeight:500,border:"1px solid #D4E8E2"}}><i className="ri-layout-grid-line" style={{fontSize:11}}></i>Dashboard · MBR-Lite</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:999,background:"#EFF2F1",color:"#525C59",fontSize:11,fontWeight:500,border:"1px solid #E0E5E4"}}><span style={{width:5,height:5,borderRadius:999,background:"#76C08D"}}></span>Auto-refreshing</span>
+            </div>
+            <h1 style={{fontFamily:"'Inter Display',Inter",fontSize:32,lineHeight:"40px",letterSpacing:"-0.015em",fontWeight:500,color:"#161A18",margin:0}}>{name||"Immigration MBR"}</h1>
+            <p style={{fontSize:14,color:"#525C59",margin:"6px 0 0",lineHeight:"20px"}}>Your immigration program at a glance: active cases, filings, spend, and volume trends.</p>
+          </div>
+          <div style={{fontSize:12,color:"#767F7D",textAlign:"right",marginTop:4}}>
+            <div>Data as of</div>
+            <div style={{fontWeight:500,color:"#161A18"}}>May 7, 2026 · 9:41 AM</div>
+            <button style={{marginTop:4,display:"inline-flex",alignItems:"center",gap:4,background:"none",border:0,cursor:"pointer",color:"#1A6251",fontSize:12,fontWeight:500,padding:0}}><i className="ri-refresh-line" style={{fontSize:12}}></i> Refresh</button>
+          </div>
+        </div>
+        {/* Filters */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:14,paddingTop:14,borderTop:"1px solid #EFF2F1"}}>
+          <span style={{fontSize:12,fontWeight:500,color:"#767F7D",letterSpacing:"0.02em"}}>FILTERS</span>
+          {[{l:"Date range",v:"Last 12 months"},{l:"Business Unit",v:"All (12)"},{l:"Attorney",v:"All (4)"},{l:"Case Type",v:"All"},{l:"Status",v:"All"}].map(f=>(
+            <button key={f.l} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",background:"#fff",border:"1px solid #E0E5E4",borderRadius:999,fontSize:12,fontWeight:500,color:"#313836",cursor:"pointer"}}>
+              <span style={{color:"#767F7D",fontWeight:400}}>{f.l}</span>
+              <span style={{fontWeight:500}}>{f.v}</span>
+              <i className="ri-arrow-down-s-line" style={{fontSize:13,color:"#9AA3A1"}}></i>
+            </button>
+          ))}
+          <button style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 10px",background:"transparent",border:"1px dashed #C4CBCA",borderRadius:999,fontSize:12,color:"#525C59",cursor:"pointer"}}>
+            <i className="ri-add-line" style={{fontSize:13}}></i> Add filter
+          </button>
+        </div>
+      </div>
+
+      <div style={{padding:"24px 32px 60px",display:"flex",flexDirection:"column",gap:24}}>
+        {/* KPI Row */}
+        <div style={{display:"flex",gap:14}}>
+          <DashKPI label="Total Active Cases" value="409" sub="Status: In Progress" delta="+8.4%" positive/>
+          <DashKPI label="New Cases This Quarter" value="187" sub="Q4 FY26 · started since Feb 1" delta="+24%" positive/>
+          <DashKPI label="In Progress by Milestone" value="431" sub="cases"
+            breakdown={[
+              {label:"Collecting Information", value:142, color:"#207460"},
+              {label:"Preparing Materials",    value:87,  color:"#4D9A88"},
+              {label:"Pending Decision",       value:178, color:"#F2BA77"},
+              {label:"Awaiting Signature",     value:24,  color:"#D88F4E"},
+            ]}
+          />
+        </div>
+
+        {/* Stacked bar */}
+        <div style={{background:"#fff",border:"1px solid #E0E5E4",borderRadius:12,padding:"20px 24px",boxShadow:"0 1px 2px rgba(10,13,20,0.03)"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:4}}>
+            <div>
+              <div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:18,color:"#161A18",letterSpacing:"-0.005em"}}>Cases filed per month</div>
+              <div style={{fontSize:13,color:"#767F7D",marginTop:2}}>Last 12 months · grouped by Case Type · {totalFiled} total</div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{display:"flex",background:"#F5F7F6",border:"1px solid #E0E5E4",borderRadius:7,overflow:"hidden"}}>
+                {["Monthly","Quarterly"].map(g=><button key={g} onClick={()=>setGranularity(g)} style={{padding:"5px 12px",border:0,borderRadius:6,fontSize:12,fontWeight:500,cursor:"pointer",background:granularity===g?"#fff":"transparent",color:granularity===g?"#161A18":"#767F7D",margin:2,boxShadow:granularity===g?"0 1px 2px rgba(0,0,0,0.08)":"none",transition:"all 120ms"}}>{g}</button>)}
+              </div>
+              <button style={{width:28,height:28,display:"grid",placeItems:"center",background:"transparent",border:"1px solid #E0E5E4",borderRadius:6,cursor:"pointer",color:"#525C59",fontSize:16}}><i className="ri-more-2-fill"></i></button>
+            </div>
+          </div>
+          <div style={{marginTop:16}}>
+            <DashStackedBar data={DASH_FILED} series={DASH_SERIES} height={260}/>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:16,marginTop:14,paddingTop:14,borderTop:"1px solid #EFF2F1"}}>
+            {DASH_SERIES.map(s=><div key={s.key} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:"#313836"}}>
+              <span style={{width:10,height:10,borderRadius:2,background:s.color}}></span>{s.label}
+            </div>)}
+          </div>
+        </div>
+
+        {/* Horizontal bars */}
+        <div style={{background:"#fff",border:"1px solid #E0E5E4",borderRadius:12,padding:"20px 24px",boxShadow:"0 1px 2px rgba(10,13,20,0.03)"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16}}>
+            <div>
+              <div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:18,color:"#161A18",letterSpacing:"-0.005em"}}>Active cases by Business Unit</div>
+              <div style={{fontSize:13,color:"#767F7D",marginTop:2}}>409 active cases across 9 units</div>
+            </div>
+            <button style={{width:28,height:28,display:"grid",placeItems:"center",background:"transparent",border:"1px solid #E0E5E4",borderRadius:6,cursor:"pointer",color:"#525C59",fontSize:16}}><i className="ri-more-2-fill"></i></button>
+          </div>
+          <DashHBar data={DASH_BU}/>
+        </div>
+
+        {/* AI Insights */}
+        <div style={{background:"#fff",border:"1px solid #E0E5E4",borderRadius:12,padding:"20px 24px",boxShadow:"0 1px 2px rgba(10,13,20,0.03)"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:20}}>
+            <div style={{flex:"0 0 220px"}}>
+              <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px",background:"#FFF5D1",border:"1px solid #F8E59A",borderRadius:999,fontSize:11,fontWeight:500,color:"#886600",marginBottom:10}}>
+                <i className="ri-sparkling-line" style={{fontSize:11}}></i> SUGGESTED BY ALMA
+              </div>
+              <div style={{fontFamily:"'Inter Display',Inter",fontSize:17,fontWeight:500,color:"#161A18",lineHeight:"24px",letterSpacing:"-0.005em"}}>Three things to flag for your CFO this quarter</div>
+              <div style={{fontSize:12,color:"#767F7D",marginTop:6,lineHeight:"18px"}}>Generated from this dashboard's data. Edit, reorder, or regenerate before sharing.</div>
+              <button style={{marginTop:12,display:"inline-flex",alignItems:"center",gap:5,height:30,padding:"0 12px",background:"#F5F7F6",border:"1px solid #E0E5E4",borderRadius:6,fontSize:12,fontWeight:500,color:"#525C59",cursor:"pointer"}}><i className="ri-refresh-line" style={{fontSize:12}}></i> Regenerate</button>
+            </div>
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:16}}>
+              <InsightCard n="1" title="H-1B cap filings drove a 24% spike in March" body="Engineering filed 22 H-1B Lottery cases this cycle, the highest in 3 years. Plan to mirror this volume in FY27 budget — expect $310K in cap-related fees alone."/>
+              <InsightCard n="2" title="PERM volume in Engineering is 2.3× last year" body="90 PERM cases initiated for Engineering in the last 12 months vs. 42 the prior year. This is a leading indicator of green card spend pressure 12–18 months out."/>
+              <InsightCard n="3" title="Hardware org has 89 active cases, second only to Engineering" body="As the team has grown to 1,400+, Hardware now represents 22% of all sponsorships. Worth a dedicated quarterly review with the Hardware HRBP."/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCREEN: DASHBOARD CANVAS (empty + drag-and-drop builder)
+//
+// Layout:
+//   Left/center: canvas grid with droppable slots
+//   Right rail (280px): list of all saved reports, each draggable
+//
+// Interaction:
+//   - Drag a report from the rail → drop onto canvas slot
+//   - Dropped reports render as full-size cards (mini Volume style)
+//   - Drag dropped cards to reorder on canvas
+//   - Click × on a card to remove it
+//   - Same rail + reorder works on populated dashboard too
+// ═══════════════════════════════════════════════════════════════
+
+// ── Mini chart renderers ─────────────────────────────────────
+function MiniStackedBar({ color="#207460" }) {
+  const data = [20,32,25,40,28,35,50,42,38,56,44,37];
+  const max = Math.max(...data);
+  return (
+    <div style={{display:"flex",alignItems:"flex-end",gap:2,height:80,padding:"4px 2px 0"}}>
+      {data.map((v,i) => (
+        <div key={i} style={{flex:1,height:`${(v/max)*100}%`,background:color,borderRadius:"2px 2px 0 0",opacity:0.45+((i/data.length)*0.55)}}></div>
+      ))}
+    </div>
+  );
+}
+function MiniLineChart({ color="#048AF5" }) {
+  const pts=[30,42,35,55,48,60,52,70,65,80,72,85];
+  const max=Math.max(...pts),min=Math.min(...pts),W=200,H=80;
+  const x=i=>(i/(pts.length-1))*W, y=v=>H-((v-min)/(max-min||1))*(H-10)-5;
+  const path=pts.map((p,i)=>`${i===0?"M":"L"} ${x(i)} ${y(p)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:80,display:"block"}}>
+      <path d={`${path} L ${W} ${H} L 0 ${H} Z`} fill={color} opacity="0.1"/>
+      <path d={path} fill="none" stroke={color} strokeWidth="2"/>
+      <circle cx={x(pts.length-1)} cy={y(pts[pts.length-1])} r="3" fill={color}/>
+    </svg>
+  );
+}
+function MiniHBar({ color="#207460" }) {
+  const bars=[{l:"Engineering",v:142},{l:"Hardware",v:89},{l:"Product",v:47},{l:"Sales",v:38},{l:"Data & Analytics",v:34}];
+  const max=bars[0].v;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6,padding:"4px 0"}}>
+      {bars.map((b,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:90,fontSize:10,color:"#525C59",textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.l}</div>
+          <div style={{flex:1,height:10,background:"#F5F7F6",borderRadius:2,overflow:"hidden"}}>
+            <div style={{width:`${(b.v/max)*100}%`,height:"100%",background:color,borderRadius:2}}></div>
+          </div>
+          <div style={{fontSize:10,color:"#161A18",fontWeight:500,width:28}}>{b.v}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function MiniKPI() {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:80,gap:6}}>
+      <div style={{fontFamily:"'Inter Display',Inter",fontSize:40,fontWeight:500,color:"#207460",letterSpacing:"-0.02em",lineHeight:1}}>409</div>
+      <div style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",background:"#E2F6E6",color:"#2E744C",borderRadius:999,fontSize:11,fontWeight:500}}>
+        <i className="ri-arrow-up-line" style={{fontSize:11}}></i>+8.4%
+      </div>
+    </div>
+  );
+}
+function MiniList() {
+  const rows=[["Parth Sharma","PERM","285d","#EF4444"],["Aditya A.","H-1B","116d","#F59E0B"],["Jialiang J.","H-1B","90d","#F59E0B"],["Mei Wang","PERM","78d","#161A18"]];
+  return (
+    <div style={{display:"flex",flexDirection:"column"}}>
+      {rows.map(([n,t,d,col],i)=>(
+        <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 44px 36px",gap:4,padding:"5px 0",borderBottom:i<rows.length-1?"1px solid #F5F7F6":"none",alignItems:"center"}}>
+          <div style={{fontSize:11,fontWeight:500,color:"#161A18",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n}</div>
+          <div style={{fontSize:10,color:"#767F7D"}}>{t}</div>
+          <div style={{fontSize:10,fontWeight:600,color:col,textAlign:"right"}}>{d}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function MiniTable() {
+  const rows=[["Engineering",98,31,13],["Hardware",54,21,14],["Product",32,11,4]];
+  return (
+    <div style={{fontSize:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 36px 36px 36px",gap:4,padding:"3px 0",borderBottom:"1px solid #E0E5E4",color:"#9AA3A1",fontWeight:500}}>
+        <div>BU</div><div style={{textAlign:"right"}}>H-1B</div><div style={{textAlign:"right"}}>PERM</div><div style={{textAlign:"right"}}>TN</div>
+      </div>
+      {rows.map((r,i)=>(
+        <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 36px 36px 36px",gap:4,padding:"4px 0",borderBottom:i<rows.length-1?"1px solid #F5F7F6":"none",color:"#161A18"}}>
+          <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r[0]}</div>
+          <div style={{textAlign:"right"}}>{r[1]}</div><div style={{textAlign:"right"}}>{r[2]}</div><div style={{textAlign:"right"}}>{r[3]}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function ReportPreview({ r }) {
+  if (r.type==="Summary KPI")     return <MiniKPI/>;
+  if (r.type==="List")            return <MiniList/>;
+  if (r.type==="Table")           return <MiniTable/>;
+  if (r.type==="Count Over Time") return <MiniLineChart color="#048AF5"/>;
+  if (r.icon==="ri-bar-chart-horizontal-fill") return <MiniHBar/>;
+  return <MiniStackedBar color="#207460"/>;
+}
+
+// ── Size options for resizable cards ─────────────────────────
+// Each card can be: small (1 col), medium (2 cols), large (3 cols)
+const SIZE_OPTIONS = [
+  { id:"small",  label:"S", cols:1, icon:"ri-layout-column-line",     title:"Small (1 column)" },
+  { id:"medium", label:"M", cols:2, icon:"ri-layout-2-line",          title:"Medium (2 columns)" },
+  { id:"large",  label:"L", cols:3, icon:"ri-layout-fill",            title:"Large (full width)" },
+];
+
+// ── Dropped report card (resizable, draggable, removable) ─────
+function DroppedReportCard({ r, index, size, onRemove, onResize, onDragStart, onDragOver, onDrop, isDragOver }) {
+  const [showControls, setShowControls] = useState(false);
+  const tc = TYPE_COLORS[r.type]||{bg:"#EFF2F1",fg:"#525C59"};
+  const colSpan = SIZE_OPTIONS.find(s=>s.id===size)?.cols || 1;
+
+  return (
+    <div
+      draggable
+      onDragStart={(e)=>onDragStart(e,index)}
+      onDragOver={(e)=>onDragOver(e,index)}
+      onDrop={(e)=>onDrop(e,index)}
+      onMouseEnter={()=>setShowControls(true)}
+      onMouseLeave={()=>setShowControls(false)}
+      style={{
+        gridColumn: `span ${colSpan}`,
+        background:"#fff",
+        border:`1.5px solid ${isDragOver?"#207460":"#E0E5E4"}`,
+        borderRadius:12,
+        boxShadow: isDragOver
+          ? "0 0 0 3px rgba(32,116,96,0.15), 0 4px 16px rgba(10,13,20,0.08)"
+          : "0 1px 3px rgba(10,13,20,0.05)",
+        transition:"border-color 120ms, box-shadow 120ms, transform 80ms",
+        cursor:"grab",
+        position:"relative",
+        overflow:"hidden",
+        transform: isDragOver?"scale(1.01)":"scale(1)",
+      }}
+    >
+      {/* Hover controls bar */}
+      <div style={{
+        position:"absolute", top:10, left:0, right:0,
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        padding:"0 12px",
+        opacity: showControls?1:0,
+        transition:"opacity 150ms",
+        zIndex:3, pointerEvents: showControls?"all":"none",
+      }}>
+        {/* Drag handle */}
+        <div style={{display:"flex",alignItems:"center",gap:4,color:"#9AA3A1",fontSize:13,cursor:"grab"}}>
+          <i className="ri-draggable"></i>
+        </div>
+
+        {/* Size controls */}
+        <div style={{display:"flex",alignItems:"center",gap:3,background:"#fff",border:"1px solid #E0E5E4",borderRadius:7,padding:"3px 4px",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>
+          {SIZE_OPTIONS.map(opt=>(
+            <button key={opt.id} onClick={(e)=>{e.stopPropagation();onResize(index,opt.id);}}
+              title={opt.title}
+              style={{
+                width:26,height:22,display:"grid",placeItems:"center",
+                borderRadius:5,border:0,cursor:"pointer",
+                background:size===opt.id?"#207460":"transparent",
+                color:size===opt.id?"#fff":"#525C59",
+                fontSize:13,transition:"all 120ms",
+              }}>
+              <span style={{fontSize:10,fontWeight:600}}>{opt.label}</span>
+            </button>
+          ))}
+          <div style={{width:1,height:14,background:"#E0E5E4",margin:"0 2px"}}></div>
+          {/* Remove */}
+          <button onClick={(e)=>{e.stopPropagation();onRemove(index);}}
+            style={{
+              width:22,height:22,display:"grid",placeItems:"center",
+              borderRadius:5,border:0,cursor:"pointer",
+              background:"transparent",color:"#9AA3A1",fontSize:14,
+            }}
+            onMouseEnter={(e)=>{e.currentTarget.style.background="#FFEAEB";e.currentTarget.style.color="#DC455A";}}
+            onMouseLeave={(e)=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="#9AA3A1";}}
+          >
+            <i className="ri-close-line"></i>
+          </button>
+        </div>
+      </div>
+
+      {/* Chart preview */}
+      <div style={{padding:"44px 18px 12px",background:"#FCFDFC",borderBottom:"1px solid #EFF2F1",minHeight:130}}>
+        <ReportPreview r={r}/>
+      </div>
+
+      {/* Metadata */}
+      <div style={{padding:"12px 16px 14px"}}>
+        <div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:14,color:"#161A18",letterSpacing:"-0.005em",lineHeight:"20px",marginBottom:6}}>{r.name}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{display:"inline-flex",padding:"2px 8px",borderRadius:4,background:tc.bg,color:tc.fg,fontSize:11,fontWeight:500}}>{r.type}</span>
+          <span style={{fontSize:11,color:"#9AA3A1"}}>{r.updated} · {r.by}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Report picker rail — grouped by folder ────────────────────
+// Folder groupings (matching the analytics nav folders)
+const RAIL_FOLDERS = [
+  { id:"f-exec",    label:"Executive Reviews",  reportIds:["r4","r1","r2"] },
+  { id:"f-ops",     label:"Operations",         reportIds:["r3","r6","r10"] },
+  { id:"f-finance", label:"Finance",            reportIds:["r8","r2","r5"] },
+  { id:"f-lottery", label:"H-1B Lottery FY27",  reportIds:["r7","r9"] },
+];
+const RAIL_UNGROUPED_LABEL = "Other reports";
+
+function ReportPickerRail({ addedIds, onAdd }) {
+  const [search, setSearch] = useState("");
+
+  const filtered = A_REPORTS.filter(r =>
+    r.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Build grouped structure
+  const assignedIds = new Set(RAIL_FOLDERS.flatMap(f=>f.reportIds));
+  const groups = [
+    ...RAIL_FOLDERS.map(f=>({
+      label: f.label,
+      icon: "ri-folder-line",
+      reports: filtered.filter(r=>f.reportIds.includes(r.id)),
+    })).filter(g=>g.reports.length>0),
+    {
+      label: RAIL_UNGROUPED_LABEL,
+      icon: "ri-file-list-3-line",
+      reports: filtered.filter(r=>!assignedIds.has(r.id)),
+    },
+  ].filter(g=>g.reports.length>0);
+
+  return (
+    <aside style={{
+      width:280, flex:"0 0 280px",
+      borderLeft:"1px solid #E0E5E4",
+      background:"#fff",
+      display:"flex", flexDirection:"column",
+      height:"100%",
+    }}>
+      {/* Rail header */}
+      <div style={{padding:"18px 16px 14px",borderBottom:"1px solid #EFF2F1"}}>
+        <div style={{fontFamily:"'Inter Display',Inter",fontWeight:500,fontSize:15,color:"#161A18",letterSpacing:"-0.005em",marginBottom:3}}>Add reports</div>
+        <div style={{fontSize:12,color:"#767F7D",lineHeight:"18px",marginBottom:12}}>Drag onto the canvas or click + to add.</div>
+        <div style={{position:"relative"}}>
+          <i className="ri-search-line" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:"#9AA3A1",fontSize:13}}></i>
+          <input
+            value={search} onChange={(e)=>setSearch(e.target.value)}
+            placeholder="Search reports..."
+            style={{width:"100%",height:32,padding:"0 8px 0 30px",background:"#F5F7F6",border:"1px solid #E0E5E4",borderRadius:7,fontSize:12,outline:"none",fontFamily:"Inter,system-ui"}}
+          />
+        </div>
+      </div>
+
+      {/* Grouped report list */}
+      <div style={{flex:1,overflowY:"auto",padding:"10px 10px 16px"}}>
+        {groups.length===0 && (
+          <div style={{textAlign:"center",padding:"32px 16px",color:"#9AA3A1",fontSize:13}}>No reports match your search</div>
+        )}
+        {groups.map((group,gi)=>(
+          <div key={gi} style={{marginBottom:20}}>
+            {/* Group label */}
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"0 6px 8px",marginBottom:2}}>
+              <i className={group.icon} style={{fontSize:13,color:"#9AA3A1"}}></i>
+              <span style={{fontSize:11,fontWeight:500,color:"#9AA3A1",letterSpacing:"0.04em",textTransform:"uppercase"}}>{group.label}</span>
+              <span style={{fontSize:10,color:"#C4CBCA",marginLeft:"auto"}}>{group.reports.length}</span>
+            </div>
+            {/* Report cards */}
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {group.reports.map(r=>{
+                const tc = TYPE_COLORS[r.type]||{bg:"#EFF2F1",fg:"#525C59"};
+                const isAdded = addedIds.includes(r.id);
+                return (
+                  <div
+                    key={r.id}
+                    draggable={!isAdded}
+                    onDragStart={(e)=>{
+                      e.dataTransfer.setData("reportId",r.id);
+                      e.dataTransfer.effectAllowed="copy";
+                    }}
+                    style={{
+                      display:"flex", alignItems:"center", gap:10,
+                      padding:"10px 10px",
+                      borderRadius:8,
+                      background: isAdded?"#F9FAFA":"#fff",
+                      border:`1px solid ${isAdded?"#EFF2F1":"#E0E5E4"}`,
+                      cursor: isAdded?"default":"grab",
+                      opacity: isAdded?0.55:1,
+                      transition:"all 120ms",
+                    }}
+                    onMouseEnter={(e)=>{ if(!isAdded){ e.currentTarget.style.background="#F5F7F6"; e.currentTarget.style.borderColor="#C4CBCA"; }}}
+                    onMouseLeave={(e)=>{ if(!isAdded){ e.currentTarget.style.background="#fff"; e.currentTarget.style.borderColor="#E0E5E4"; }}}
+                  >
+                    <div style={{
+                      width:32, height:32, borderRadius:8,
+                      background:tc.bg, color:tc.fg,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:16, flexShrink:0,
+                    }}>
+                      <i className={r.icon}></i>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:500,color:"#161A18",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{r.name}</div>
+                      <span style={{fontSize:10,padding:"1px 6px",borderRadius:3,background:tc.bg,color:tc.fg,fontWeight:500}}>{r.type}</span>
+                    </div>
+                    {isAdded ? (
+                      <div style={{
+                        width:24, height:24, borderRadius:"50%",
+                        background:"#EBF5F2", border:"1px solid #D4E8E2",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        flexShrink:0,
+                      }}>
+                        <i className="ri-check-line" style={{fontSize:13,color:"#207460"}}></i>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={()=>onAdd(r)}
+                        style={{
+                          width:24, height:24, borderRadius:"50%",
+                          border:"1px solid #D4E8E2",
+                          background:"#EBF5F2",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          cursor:"pointer", flexShrink:0,
+                          padding:0,
+                        }}
+                        onMouseEnter={(e)=>{e.currentTarget.style.background="#207460";e.currentTarget.style.borderColor="#207460";e.currentTarget.children[0].style.color="#fff";}}
+                        onMouseLeave={(e)=>{e.currentTarget.style.background="#EBF5F2";e.currentTarget.style.borderColor="#D4E8E2";e.currentTarget.children[0].style.color="#207460";}}
+                      >
+                        <i className="ri-add-line" style={{fontSize:14,color:"#207460"}}></i>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Done */}
+      <div style={{padding:"14px 16px",borderTop:"1px solid #EFF2F1"}}>
+        <div style={{fontSize:11,color:"#9AA3A1",marginBottom:8,textAlign:"center"}}>
+          {addedIds.length} report{addedIds.length!==1?"s":""} on this dashboard
+        </div>
+        <Button variant="primary" style={{width:"100%",justifyContent:"center"}} icon="ri-check-line">
+          Done editing
+        </Button>
+      </div>
+    </aside>
+  );
+}
+
+// ── Dashboard canvas (drag-to-reorder, resize) ────────────────
+function DashboardCanvas({ cards, sizes, onReorder, onRemove, onResize, onDrop }) {
+  const [dragFromIndex, setDragFromIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
+  const handleDragStart = (e, index) => {
+    setDragFromIndex(index);
+    e.dataTransfer.effectAllowed="move";
+    e.dataTransfer.setData("canvasIndex", String(index));
+  };
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = dragFromIndex!==null?"move":"copy";
+    setDragOverIndex(index);
+  };
+  const handleDrop = (e, index) => {
+    e.preventDefault();
+    const canvasIdx = e.dataTransfer.getData("canvasIndex");
+    const reportId  = e.dataTransfer.getData("reportId");
+    if (canvasIdx!==""&&dragFromIndex!==null) {
+      onReorder(parseInt(canvasIdx), index);
+    } else if (reportId) {
+      onDrop(reportId, index);
+    }
+    setDragFromIndex(null);
+    setDragOverIndex(null);
+  };
+  const handleDragEnd = () => { setDragFromIndex(null); setDragOverIndex(null); };
+
+  return (
+    <div
+      onDragOver={(e)=>e.preventDefault()}
+      onDrop={(e)=>{
+        e.preventDefault();
+        const id=e.dataTransfer.getData("reportId");
+        if(id) onDrop(id,cards.length);
+        setDragOverIndex(null);
+      }}
+      style={{flex:1,padding:"28px 28px 60px",background:"#F5F7F6",minHeight:"100%"}}
+    >
+      {cards.length===0 ? (
+        <div style={{
+          minHeight:200, border:"2px dashed #C4CBCA", borderRadius:12,
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          gap:12,background:"rgba(255,255,255,0.5)",padding:"48px 24px",
+        }}>
+          <div style={{width:48,height:48,borderRadius:12,background:"#EBF5F2",color:"#1A6251",display:"grid",placeItems:"center",fontSize:22}}>
+            <i className="ri-drag-drop-line"></i>
+          </div>
+          <div style={{fontSize:14,fontWeight:500,color:"#525C59"}}>Drag reports here</div>
+          <div style={{fontSize:12,color:"#9AA3A1"}}>Or click + on any report in the panel</div>
+        </div>
+      ) : (
+        <div style={{
+          display:"grid",
+          gridTemplateColumns:"repeat(3, 1fr)",
+          gap:16,
+          alignItems:"start",
+        }}>
+          {cards.map((r,i)=>(
+            <DroppedReportCard
+              key={r.id+i}
+              r={r} index={i}
+              size={sizes[i]||"small"}
+              onRemove={onRemove}
+              onResize={onResize}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              isDragOver={dragOverIndex===i&&dragFromIndex!==i}
+            />
+          ))}
+          {/* Drop slot at end */}
+          <div
+            onDragOver={(e)=>{e.preventDefault();setDragOverIndex(cards.length);}}
+            onDrop={(e)=>{
+              e.preventDefault();
+              const id=e.dataTransfer.getData("reportId");
+              if(id) onDrop(id,cards.length);
+              setDragOverIndex(null);
+            }}
+            style={{
+              border:`2px dashed ${dragOverIndex===cards.length?"#207460":"#C4CBCA"}`,
+              borderRadius:12, minHeight:160,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              color: dragOverIndex===cards.length?"#207460":"#C4CBCA",
+              background: dragOverIndex===cards.length?"#EBF5F2":"transparent",
+              fontSize:13, fontWeight:500, cursor:"pointer", transition:"all 120ms",
+            }}
+          >
+            <span style={{display:"flex",alignItems:"center",gap:6}}>
+              <i className="ri-add-line" style={{fontSize:18}}></i>Drop here
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Full empty dashboard screen ───────────────────────────────
+function ScreenDashboardEmpty({ name, navigate }) {
+  const [cards, setCards] = useState([]);
+  // sizes: array of "small"|"medium"|"large" parallel to cards
+  const [sizes, setSizes] = useState([]);
+
+  const addedIds = cards.map(r=>r.id);
+
+  const handleAdd = (r) => {
+    if (!addedIds.includes(r.id)) {
+      setCards(prev=>[...prev,r]);
+      setSizes(prev=>[...prev,"small"]);
+    }
+  };
+  const handleRemove = (index) => {
+    setCards(prev=>prev.filter((_,i)=>i!==index));
+    setSizes(prev=>prev.filter((_,i)=>i!==index));
+  };
+  const handleReorder = (fromIdx, toIdx) => {
+    if(fromIdx===toIdx) return;
+    setCards(prev=>{
+      const next=[...prev]; const [m]=next.splice(fromIdx,1); next.splice(toIdx,0,m); return next;
+    });
+    setSizes(prev=>{
+      const next=[...prev]; const [m]=next.splice(fromIdx,1); next.splice(toIdx,0,m); return next;
+    });
+  };
+  const handleDrop = (reportId, slotIndex) => {
+    const r=A_REPORTS.find(r=>r.id===reportId);
+    if(!r||addedIds.includes(r.id)) return;
+    setCards(prev=>{ const next=[...prev]; next.splice(slotIndex,0,r); return next; });
+    setSizes(prev=>{ const next=[...prev]; next.splice(slotIndex,0,"small"); return next; });
+  };
+  const handleResize = (index, newSize) => {
+    setSizes(prev=>prev.map((s,i)=>i===index?newSize:s));
+  };
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden"}}>
+      {/* Topbar */}
+      <div style={{background:"#fff",borderBottom:"1px solid #E0E5E4",padding:"0 24px",height:48,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:"#525C59"}}>
+          <span style={{cursor:"pointer"}} onClick={()=>navigate("reports")}>Analytics</span>
+          <i className="ri-arrow-right-s-line" style={{color:"#C4CBCA",fontSize:14}}></i>
+          <span style={{cursor:"pointer"}} onClick={()=>navigate("dashboards")}>Dashboards</span>
+          <i className="ri-arrow-right-s-line" style={{color:"#C4CBCA",fontSize:14}}></i>
+          <span style={{color:"#161A18",fontWeight:500}}>{name||"New Dashboard"}</span>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <Button variant="ghost" size="sm" onClick={()=>navigate("dashboards")}>Discard</Button>
+          <Button variant="primary" size="sm" icon="ri-check-line"
+            disabled={cards.length===0}
+            onClick={()=>navigate("dashboard-canvas")}
+          >Save dashboard</Button>
+        </div>
+      </div>
+
+      {/* Dashboard name + hint */}
+      <div style={{padding:"16px 24px 14px",background:"#fff",borderBottom:"1px solid #EFF2F1",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <h1 style={{fontFamily:"'Inter Display',Inter",fontSize:20,fontWeight:500,color:"#161A18",letterSpacing:"-0.01em",margin:0}}>{name||"New Dashboard"}</h1>
+          <i className="ri-pencil-line" style={{fontSize:14,color:"#C4CBCA",cursor:"pointer"}}></i>
+        </div>
+        <div style={{fontSize:12,color:"#9AA3A1",marginTop:4}}>
+          {cards.length===0
+            ? "Drag reports from the right panel to build your dashboard."
+            : `${cards.length} report${cards.length!==1?"s":""} added · hover a card to resize or remove · drag to reorder`}
+        </div>
+      </div>
+
+      {/* Canvas + rail */}
+      <div style={{flex:1,display:"flex",minHeight:0,overflow:"hidden"}}>
+        <div style={{flex:1,overflowY:"auto"}}>
+          <DashboardCanvas
+            cards={cards} sizes={sizes}
+            onReorder={handleReorder}
+            onRemove={handleRemove}
+            onResize={handleResize}
+            onDrop={handleDrop}
+          />
+        </div>
+        <ReportPickerRail addedIds={addedIds} onAdd={handleAdd}/>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── ROOT APP ─────────────────────────────────────────────────
+// Hash scheme:
+//   #reports            → Combined view (dashboards + reports)
+//   #reports-only       → Reports tab selected (reports grid only)
+//   #dashboards         → Dashboards tab selected (dashboards grid only)
+//   #empty              → Empty state
+//   #templates          → Template library, population tab
+//   #templates-spend    → Template library, spend tab
+//   #templates-outcomes → Template library, outcomes tab
+//   #templates-timelines→ Template library, timelines tab
+//   #templates-vendor   → Template library, vendor tab
+//   #new-dashboard      → New dashboard modal
+//   #dashboard-canvas   → Populated dashboard view
+//   #dashboard-empty    → Empty dashboard view
+
+function parseRoute() {
+  const h = window.location.hash.replace("#","");
+  if (!h || h==="reports") return {screen:"reports", cat:null};
+  if (h==="reports-only")  return {screen:"reports-only", cat:null};
+  if (h==="dashboards")    return {screen:"dashboards", cat:null};
+  if (h==="empty")         return {screen:"empty", cat:null};
+  if (h==="new-dashboard") return {screen:"new-dashboard", cat:null};
+  if (h==="dashboard-canvas") return {screen:"dashboard-canvas", cat:null};
+  if (h==="dashboard-empty")  return {screen:"dashboard-empty",  cat:null};
+  if (h==="builder")       return {screen:"builder", cat:null};
+  if (h.startsWith("templates")) {
+    const cat = h.replace("templates-","").replace("templates","") || "population";
+    const valid = ["population","spend","outcomes","timelines","vendor"];
+    return {screen:"templates", cat:valid.includes(cat)?cat:"population"};
+  }
+  return {screen:"reports", cat:null};
+}
+
+// Determines which analytics nav item should appear active
+function getNavActive(screen) {
+  if (screen==="reports"||screen==="empty") return "reports";
+  if (screen==="reports-only"||screen==="mine"||screen==="shared"||screen==="favorites"||screen==="trash") return "reports-only";
+  if (screen==="dashboards"||screen==="dashboard-canvas"||screen==="dashboard-empty") return "dashboards";
+  if (screen==="templates"||screen.startsWith("templates-")) return "templates";
+  if (screen==="new-dashboard") return "dashboards";
+  return "reports";
+}
+
+const SCREEN_LABELS = {
+  "reports":          "Analytics — Home",
+  "reports-only":     "Analytics — Reports",
+  "dashboards":       "Analytics — Dashboards",
+  "empty":            "Analytics — Empty",
+  "templates":        "Template Library",
+  "new-dashboard":    "New Dashboard Modal",
+  "dashboard-canvas": "Dashboard Canvas",
+  "dashboard-empty":  "Dashboard Empty",
+};
+
+function ScreenPicker({ current, onPick }) {
+  const [open, setOpen] = useState(false);
+  const screens = Object.entries(SCREEN_LABELS);
+  const label = SCREEN_LABELS[current] || current;
+  return <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:100,fontFamily:"Inter,system-ui"}}>
+    {open&&<div style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",transform:"translateX(-50%)",background:"#161A18",borderRadius:12,padding:6,boxShadow:"0 8px 32px rgba(0,0,0,0.24)",minWidth:240}}>
+      {screens.map(([id,lbl])=><button key={id} onClick={()=>{onPick(id);setOpen(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"8px 12px",borderRadius:7,background:current===id?"rgba(255,255,255,0.12)":"transparent",border:0,color:current===id?"#fff":"#C4CBCA",cursor:"pointer",fontSize:13,fontWeight:500,textAlign:"left"}}>
+        {current===id?<i className="ri-check-line" style={{fontSize:13,color:"#76C08D"}}></i>:<span style={{width:13}}></span>}
+        {lbl}
+      </button>)}
+    </div>}
+    <button onClick={()=>setOpen(!open)} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",background:"#161A18",border:0,borderRadius:999,color:"#fff",cursor:"pointer",fontSize:13,fontWeight:500,boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}>
+      <i className="ri-layouts-line" style={{fontSize:14,color:"#9AA3A1"}}></i>
+      {label}
+      <i className={`ri-arrow-${open?"down":"up"}-s-line`} style={{fontSize:14,color:"#9AA3A1"}}></i>
+    </button>
+  </div>;
+}
+
+function App() {
+  const initial = parseRoute();
+  const [route, setRoute] = useState(initial);
+  const [newDashName, setNewDashName] = useState("");
+
+  const navigate = (screen, cat) => {
+    let hash = screen;
+    if (screen==="templates") hash = cat ? `templates-${cat}` : "templates";
+    window.location.hash = hash;
+    setRoute({screen, cat: cat||(screen==="templates"?"population":null)});
+  };
+
+  useEffect(()=>{
+    const h = ()=>{ const r=parseRoute(); setRoute(r); };
+    window.addEventListener("hashchange",h);
+    return ()=>window.removeEventListener("hashchange",h);
+  },[]);
+
+  const navActive = getNavActive(route.screen);
+
+  const handleNavClick = (key) => {
+    if (key==="reports")         navigate("reports");
+    else if (key==="reports-only") navigate("reports-only");
+    else if (key==="dashboards")   navigate("dashboards");
+    else if (key==="templates")    navigate("templates","population");
+    else if (["mine","shared","favorites","trash"].includes(key)) navigate("reports-only");
+    else if (key.startsWith("f-")) navigate("dashboard-canvas");
+    else navigate("reports");
+  };
+
+  return <div style={{display:"flex",minHeight:"100vh",background:"#FCFDFC"}}>
+    <Sidebar activeKey="analytics" onNavigate={()=>{}}/>
+    <AnalyticsNav active={navActive} onNavigate={handleNavClick}/>
+    <div style={{flex:1,display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden",position:"relative"}}>
+      {route.screen==="reports"          && <ScreenD navigate={navigate}/>}
+      {route.screen==="reports-only"     && <ScreenReports navigate={navigate}/>}
+      {route.screen==="dashboards"       && <ScreenDashboardsGrid navigate={navigate}/>}
+      {route.screen==="empty"            && <ScreenE navigate={navigate}/>}
+      {route.screen==="templates"        && <ScreenF navigate={navigate} activeCat={route.cat||"population"} onCatChange={(cat)=>navigate("templates",cat)}/>}
+      {route.screen==="dashboard-canvas" && <ScreenDashboard name={newDashName||"Immigration MBR"} navigate={navigate}/>}
+      {route.screen==="dashboard-empty"  && <ScreenDashboardEmpty name={newDashName||"New Dashboard"} navigate={navigate}/>}
+      {route.screen==="builder" && <div style={{flex:1,display:"grid",placeItems:"center",background:"#FCFDFC"}}>
+        <div style={{textAlign:"center",color:"#9AA3A1"}}>
+          <i className="ri-arrow-left-circle-line" style={{fontSize:48,marginBottom:12,display:"block",color:"#C4CBCA"}}></i>
+          <div style={{fontSize:14,fontWeight:500,color:"#525C59"}}>Report Builder lives in a separate file</div>
+          <div style={{fontSize:12,marginTop:4,color:"#9AA3A1"}}>Open ReportBuilder.html to continue</div>
+          <button onClick={()=>navigate("reports")} style={{marginTop:16,padding:"8px 16px",background:"#207460",color:"#fff",border:0,borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer"}}>← Back to Analytics</button>
+        </div>
+      </div>}
+      {route.screen==="new-dashboard" && <>
+        <ScreenD navigate={(s)=>{ if(s!=="new-dashboard") navigate(s); }}/>
+        <NewDashboardModal
+          onClose={()=>navigate("reports")}
+          onCreate={(name)=>{ setNewDashName(name); navigate("dashboard-empty"); }}
+        />
+      </>}
+    </div>
+    <ScreenPicker current={route.screen} onPick={(id)=>{ if(id.startsWith("templates-")){const cat=id.replace("templates-","");navigate("templates",cat);}else navigate(id); }}/>
+  </div>;
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+</script>
+</body>
+</html>

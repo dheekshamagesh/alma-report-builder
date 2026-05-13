@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assembly Node – Runtime UI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #fff;
+    --surface: #f9f9f8;
+    --border: #e5e5e3;
+    --border-light: #f0f0ee;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6b68;
+    --text-muted: #9b9b97;
+    --green: #1f6650;
+    --green-bg: #f0f7f4;
+    --green-check: #22c55e;
+    --orange: #e07b2a;
+    --orange-bg: #fef3e8;
+    --red: #dc2626;
+    --blue: #3b5bdb;
+    --alma: #1a5c47;
+    --sidebar: 56px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); display: flex; min-height: 100vh; font-size: 14px; }
+
+  /* SIDEBAR */
+  .sidebar { width: var(--sidebar); background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; flex-shrink: 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; }
+  .logo { width: 32px; height: 32px; background: var(--alma); border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #fff; font-weight: 700; font-size: 15px; }
+  .sicon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; }
+  .sicon:hover { background: var(--surface); }
+  .sicon.active { background: var(--green-bg); color: var(--green); }
+  .sicon svg { width: 18px; height: 18px; }
+  .sp { flex: 1; }
+
+  /* MAIN */
+  .main { margin-left: var(--sidebar); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* TOPBAR */
+  .topbar { padding: 0 24px; height: 52px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: #fff; position: sticky; top: 0; z-index: 50; }
+  .bc { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+  .bc span { cursor: pointer; }
+  .bc span:hover { color: var(--text-secondary); }
+  .bc .cur { color: var(--text-primary); font-weight: 500; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+  /* PAGE HEADER */
+  .ph { padding: 18px 24px 0; display: flex; align-items: center; gap: 12px; }
+  .ph h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+  .badge { font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+  .badge.ip { background: #eff6ff; color: #2563eb; }
+
+
+  /* CONTENT */
+  .content { padding: 16px 24px 24px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+
+  /* INSTRUCTIONS */
+  .inst { background: var(--surface); border-radius: 10px; padding: 13px 15px; display: flex; gap: 10px; flex-shrink: 0; }
+  .inst svg { color: var(--text-muted); flex-shrink: 0; margin-top: 1px; }
+  .inst-title { font-weight: 600; font-size: 13px; margin-bottom: 5px; }
+  .inst ol { padding-left: 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+
+  /* ── REVIEW PIPELINE STRIP ── */
+  .pipeline-strip {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .pipeline-strip table { width: 100%; border-collapse: collapse; }
+  .pipeline-strip th {
+    text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted);
+    padding: 9px 16px 7px; border-bottom: 1px solid var(--border);
+    background: var(--surface); text-transform: uppercase; letter-spacing: 0.4px;
+  }
+  .pipeline-strip td { padding: 11px 16px; font-size: 13px; vertical-align: middle; }
+  .pipeline-strip .doc-col { font-weight: 600; font-size: 13px; }
+  .pipeline-strip .doc-col span { font-weight: 400; font-size: 12px; color: var(--text-muted); margin-left: 6px; }
+  .ps { display: flex; align-items: center; gap: 6px; }
+  .s-approve { background: var(--green); color: #fff; font-size: 12px; font-weight: 500; padding: 4px 11px; border-radius: 6px; border: none; cursor: pointer; display: flex; align-items: center; gap: 3px; }
+  .s-approve:hover { opacity: .88; }
+  .s-incomplete { background: #fef2f2; color: var(--red); border: 1px solid #fecaca; font-size: 12px; font-weight: 500; padding: 4px 11px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 3px; }
+  .s-sla { background: var(--orange-bg); color: var(--orange); font-size: 12px; font-weight: 500; padding: 3px 8px; border-radius: 6px; }
+  .s-wait { font-size: 12px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); padding: 3px 10px; border-radius: 6px; }
+  .s-done { color: var(--green-check); }
+  .s-done svg { width: 18px; height: 18px; }
+
+  /* ── WORKSPACE (two-panel) ── */
+  .workspace { display: grid; grid-template-columns: 1fr 280px; gap: 14px; flex: 1; min-height: 0; }
+
+  /* PANELS */
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+  .panel-hd { padding: 11px 14px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .panel-title { font-weight: 600; font-size: 13px; }
+  .panel-sub { font-size: 12px; color: var(--text-muted); }
+
+  /* DOC ROWS */
+  .scrollable { overflow-y: auto; max-height: calc(100vh - 340px); }
+  .doc-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-light); cursor: default; transition: background .1s; }
+  .doc-row:hover { background: var(--surface); }
+  .drag { color: var(--text-muted); cursor: grab; flex-shrink: 0; line-height: 0; }
+  .drag svg { width: 12px; height: 12px; }
+  .s-ok { color: var(--green-check); flex-shrink: 0; line-height: 0; }
+  .s-ok svg { width: 15px; height: 15px; }
+  .s-clk { color: var(--text-muted); flex-shrink: 0; line-height: 0; }
+  .s-clk svg { width: 15px; height: 15px; }
+  .empty-c { width: 14px; height: 14px; border: 2px solid var(--border); border-radius: 50%; flex-shrink: 0; }
+  .fi { color: var(--text-muted); flex-shrink: 0; line-height: 0; }
+  .fi svg { width: 14px; height: 14px; }
+  .di { flex: 1; min-width: 0; }
+  .dn { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ds { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .dp { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+  .ra { display: flex; gap: 2px; flex-shrink: 0; }
+  .ib { width: 24px; height: 24px; border-radius: 5px; border: none; background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); }
+  .ib:hover { background: var(--border-light); color: var(--text-primary); }
+  .ib svg { width: 12px; height: 12px; }
+
+  .tag { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+  .tag-wait { background: var(--surface); color: var(--text-muted); }
+  .tag-dyn { background: #fef3e8; color: var(--orange); }
+
+  /* SECTION HEADERS */
+  .sec-hd { padding: 8px 12px 5px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border-bottom: 1px solid var(--border-light); background: #fafafa; }
+  .sec-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; display: flex; align-items: center; gap: 4px; }
+  .sec-label svg { width: 11px; height: 11px; }
+  .sec-ct { display: flex; align-items: center; gap: 6px; }
+  .sec-num { font-size: 10px; background: var(--surface); border: 1px solid var(--border); padding: 1px 6px; border-radius: 8px; color: var(--text-muted); }
+  .chev { transition: transform .2s; }
+  .chev.open { transform: rotate(90deg); }
+
+  /* EXHIBITS */
+  .ex-badge { width: 20px; height: 20px; border-radius: 4px; background: #fff5ed; border: 1px solid #fed7aa; color: var(--orange); font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .div-lbl { font-size: 9px; color: var(--text-muted); background: var(--surface); border: 1px dashed var(--border); border-radius: 3px; padding: 1px 4px; flex-shrink: 0; }
+
+  /* NOT PLACED */
+  .np-badge { font-size: 10px; font-weight: 600; background: #fef3e8; color: var(--orange); padding: 1px 6px; border-radius: 8px; }
+
+  /* ADD BTN */
+  .add-row { padding: 7px 12px; }
+  .add-btn { font-size: 12px; color: var(--text-muted); border: none; background: none; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 5px; }
+  .add-btn:hover { background: var(--surface); color: var(--text-secondary); }
+
+  /* QA */
+  .qa { border-top: 1px solid var(--border); }
+  .qa-hd { padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border-light); font-weight: 600; font-size: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .qa-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border-light); font-size: 12px; }
+  .qa-item:last-child { border-bottom: none; }
+  .qdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .qdot.g { background: var(--green-check); }
+  .qdot.y { background: #f59e0b; }
+  .qdot.r { background: var(--red); }
+  .qtext { flex: 1; line-height: 1.4; }
+  .qtext strong { font-weight: 600; }
+  .qd { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .qover { font-size: 10px; color: var(--text-muted); border: 1px solid var(--border); background: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; flex-shrink: 0; }
+
+  /* FILE LIBRARY */
+  .lib-search { margin: 8px 10px; display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+  .lib-search svg { width: 12px; height: 12px; color: var(--text-muted); flex-shrink: 0; }
+  .lib-search input { border: none; background: none; outline: none; font-size: 12px; width: 100%; font-family: var(--font); }
+  .lib-search input::placeholder { color: var(--text-muted); }
+  /* SEGMENTED CONTROL */
+  .seg-ctrl {
+    display: flex; align-items: center;
+    background: var(--surface); border-radius: 10px; padding: 3px;
+    margin: 8px 10px 6px; gap: 2px;
+  }
+  .seg-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 5px 8px; border-radius: 7px; border: none; background: none;
+    font-size: 12px; font-weight: 500; color: var(--text-muted);
+    cursor: pointer; transition: all .15s; font-family: var(--font);
+  }
+  .seg-btn.active {
+    background: #fff; color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.04);
+  }
+  .seg-count {
+    width: 18px; height: 18px; border-radius: 50%;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .seg-btn.active .seg-count { background: var(--green); color: #fff; }
+  .seg-btn:not(.active) .seg-count { background: #d1d1ce; color: #fff; }
+  .lib-sec { padding: 8px 10px 3px; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .lf-row { display: flex; align-items: center; gap: 6px; padding: 5px 10px; cursor: pointer; }
+  .lf-row:hover { background: var(--surface); }
+  .lf-icon svg { width: 12px; height: 12px; color: var(--text-muted); }
+  .lf-name { font-size: 11px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); }
+  .dot-p { width: 5px; height: 5px; border-radius: 50%; background: var(--orange); flex-shrink: 0; }
+  .dot-u { width: 5px; height: 5px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+
+  /* BUTTONS */
+  .btn { padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; display: inline-flex; align-items: center; gap: 5px; font-family: var(--font); }
+  .btn-ghost { background: none; border: 1px solid var(--border); color: var(--text-secondary); }
+  .btn-ghost:hover { background: var(--surface); }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-green:hover { opacity: .9; }
+  .btn-qa { background: #f0f4ff; color: var(--blue); border: 1px solid #c7d2fe; font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: var(--font); }
+  .btn-qa:hover { background: #e5ebff; }
+  .btn-sm { padding: 4px 9px; font-size: 12px; border-radius: 6px; }
+
+  /* STICKY BOTTOM BAR */
+  .bottom-bar {
+    position: fixed; bottom: 0; left: var(--sidebar); right: 0; z-index: 200;
+    display: flex; flex-direction: column;
+  }
+  .qa-drawer {
+    background: #fff; border-top: 1px solid var(--border);
+    max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+  }
+  .qa-drawer.open { max-height: 360px; overflow-y: auto; }
+  .qa-drawer-hd {
+    padding: 12px 24px 8px; font-weight: 600; font-size: 13px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border-light); background: var(--surface);
+    position: sticky; top: 0;
+  }
+  .qa-drawer-hd .qa-summary { display: flex; align-items: center; gap: 10px; }
+  .qa-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .qa-tag.red { background: #fef2f2; color: var(--red); border: 1px solid #fecaca; }
+  .qa-tag.yellow { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+  .qa-tag.green { background: var(--green-bg); color: var(--green); border: 1px solid #a7f3d0; }
+  .qa-section-title {
+    padding: 10px 24px 4px; font-size: 11px; font-weight: 700;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .qa-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 24px; border-bottom: 1px solid var(--border-light); font-size: 13px; }
+  .qa-item:last-child { border-bottom: none; }
+  .qdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+  .qdot.g { background: var(--green-check); }
+  .qdot.y { background: #f59e0b; }
+  .qdot.r { background: var(--red); }
+  .qtext { flex: 1; line-height: 1.4; }
+  .qtext strong { font-weight: 600; }
+  .qd { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .qover { font-size: 11px; color: var(--text-muted); border: 1px solid var(--border); background: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; flex-shrink: 0; }
+  .action-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 24px; background: #fff; border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+  }
+  .content { padding-bottom: 76px; }
+
+  /* WARN ROW */
+  .warn-row { background: #fffbf5 !important; }
+  .wait-row { background: #fafafa !important; }
+  .upload-row { background: #fafafe !important; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="logo">a</div>
+  <div class="sicon active"><svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="2" width="7" height="7" rx="1"/><rect x="11" y="2" width="7" height="7" rx="1"/><rect x="2" y="11" width="7" height="7" rx="1"/><rect x="11" y="11" width="7" height="7" rx="1"/></svg></div>
+  <div class="sicon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="7" r="3.5"/><path d="M3 17c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg></div>
+  <div class="sicon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 10h6M7 13h4"/></svg></div>
+  <div class="sicon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2L2 7v11h5v-5h6v5h5V7z"/></svg></div>
+  <div class="sicon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l2.5 2.5"/></svg></div>
+  <div class="sicon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h12M4 10h8M4 14h10"/></svg></div>
+  <div class="sp"></div>
+  <div class="sicon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="3"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2"/></svg></div>
+  <div class="sicon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 15.5c2-3 5-5 7-5s5 2 7 5M10 4a3 3 0 100 6 3 3 0 000-6z"/></svg></div>
+</nav>
+
+<div class="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="bc">
+      <span>Marcus Tan</span><span style="color:var(--border-light)">›</span>
+      <span>Alma Technologies</span><span style="color:var(--border-light)">›</span>
+      <span>O-1A · New</span><span style="color:var(--border-light)">›</span>
+      <span class="cur">Initial Filing Packet</span>
+    </div>
+    <div class="topbar-right">
+      <button class="ib" style="width:32px;height:32px;">
+        <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- PAGE HEADER -->
+  <div class="ph">
+    <h1>Initial Filing Packet</h1>
+    <span class="badge ip">In Progress</span>
+  </div>
+
+  <!-- CONTENT — single unified view, no tabs -->
+  <div class="content">
+
+    <!-- INSTRUCTIONS -->
+    <div class="inst">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 7h.01"/></svg>
+      <div>
+        <div class="inst-title">Instructions for Paralegal</div>
+        <ol>
+          <li>Verify all auto-populated documents resolved correctly from upstream nodes</li>
+          <li>Upload the Employer Support Letter (manual slot)</li>
+          <li>Check exhibit order matches first citation in the Supporting Statement</li>
+          <li>Run QA Check then mark ready for attorney review</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- ── REVIEW PIPELINE STRIP ── -->
+    <div class="pipeline-strip">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36%">Assigned Attorney</th>
+            <th>Paralegal Assembly</th>
+            <th>Attorney Review</th>
+            <th style="width:56px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="doc-col">Initial Filing Packet <span>O-1A · Marcus Tan</span></div>
+            </td>
+            <td>
+              <div class="ps">
+                <button class="s-approve">
+                  <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+                  Approve
+                </button>
+                <span class="s-sla">2d left</span>
+              </div>
+            </td>
+            <td><span class="s-wait">Waiting on Dependency</span></td>
+            <td>
+              <button class="ib" style="width:28px;height:28px;">
+                <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── WORKSPACE ── -->
+    <div class="workspace">
+
+      <!-- LEFT: PACKET -->
+      <div class="panel">
+        <div class="panel-hd">
+          <div>
+            <div class="panel-title">Filing Packet</div>
+            <div class="panel-sub">6 documents · 47 pages · drag to reorder</div>
+          </div>
+        </div>
+
+        <div class="scrollable">
+
+          <!-- Cover Letter ✓ -->
+          <div class="doc-row">
+            <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+            <span class="s-ok"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg></span>
+            <span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/><path d="M8 7h4M8 10h4M8 13h2"/></svg></span>
+            <div class="di"><div class="dn">Cover Letter</div><div class="ds">Doc Gen → Cover Letter</div></div>
+            <span class="dp">3 pp</span>
+            <div class="ra">
+              <button class="ib" title="Preview"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/></svg></button>
+              <button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button>
+            </div>
+          </div>
+
+          <!-- G-28 ✓ -->
+          <div class="doc-row">
+            <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+            <span class="s-ok"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 001.414 0l4-4z"/></svg></span>
+            <span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/><path d="M8 7h4M8 10h4M8 13h2"/></svg></span>
+            <div class="di"><div class="dn">G-28</div><div class="ds">Forms Node → G-28</div></div>
+            <span class="dp">2 pp</span>
+            <div class="ra">
+              <button class="ib"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/></svg></button>
+              <button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button>
+            </div>
+          </div>
+
+          <!-- I-129 ✓ dynamic -->
+          <div class="doc-row">
+            <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+            <span class="s-ok"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 001.414 0l4-4z"/></svg></span>
+            <span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/><path d="M8 7h4M8 10h4M8 13h2"/></svg></span>
+            <div class="di"><div class="dn">I-129 + O Supplement</div><div class="ds">Forms Node → All Outputs</div></div>
+            <span class="tag tag-dyn" style="margin-right:2px;">Dynamic</span>
+            <span class="dp">8 pp</span>
+            <div class="ra">
+              <button class="ib"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/></svg></button>
+              <button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Supporting Statement ✓ -->
+          <div class="doc-row">
+            <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+            <span class="s-ok"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 001.414 0l4-4z"/></svg></span>
+            <span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/><path d="M8 7h4M8 10h4M8 13h2"/></svg></span>
+            <div class="di"><div class="dn">Supporting Statement</div><div class="ds">Doc Gen → Supporting Statement · <span style="color:var(--orange);">Has Exhibits</span></div></div>
+            <span class="dp">14 pp</span>
+            <div class="ra">
+              <button class="ib"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/></svg></button>
+              <button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Employer Letter – manual empty -->
+          <div class="doc-row upload-row">
+            <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+            <span><div class="empty-c"></div></span>
+            <span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/><path d="M10 8v4M8 10h4"/></svg></span>
+            <div class="di"><div class="dn" style="color:var(--text-muted);">Employer Support Letter</div><div class="ds">Manual Upload · awaiting upload</div></div>
+            <button class="btn btn-ghost btn-sm">
+              <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13V7M7 10l3-3 3 3"/><path d="M4 16h12"/></svg>
+              Upload
+            </button>
+          </div>
+
+          <!-- LCA – waiting -->
+          <div class="doc-row wait-row">
+            <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+            <span class="s-clk"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l2 2"/></svg></span>
+            <span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/><path d="M8 7h4M8 10h4M8 13h2"/></svg></span>
+            <div class="di"><div class="dn" style="color:var(--text-muted);">LCA Posting Notice</div><div class="ds">LCA Node → All Outputs</div></div>
+            <span class="tag tag-wait">Waiting on LCA Node</span>
+            <button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button>
+          </div>
+
+          <!-- EXHIBITS section -->
+          <div class="sec-hd" onclick="toggle('ex','ec')">
+            <div class="sec-label">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h10v12H5z"/><path d="M8 8h4M8 11h3"/></svg>
+              Exhibits
+            </div>
+            <div class="sec-ct">
+              <span class="sec-num">43 exhibits</span>
+              <svg class="chev open" id="ec" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 5l5 5-5 5"/></svg>
+            </div>
+          </div>
+
+          <div id="ex">
+            <!-- Exhibit A -->
+            <div class="doc-row">
+              <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+              <div class="div-lbl">DIV</div>
+              <div class="ex-badge">A</div>
+              <div class="di"><div class="dn">IEEE Publication – AI Systems (2023)</div><div class="ds">Case Strategy · Critical Acclaim</div></div>
+              <span class="dp">4 pp</span>
+              <div class="ra"><button class="ib"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/></svg></button><button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button></div>
+            </div>
+            <!-- Exhibit B -->
+            <div class="doc-row">
+              <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+              <div class="div-lbl">DIV</div>
+              <div class="ex-badge">B</div>
+              <div class="di"><div class="dn">Passport – Marcus Tan</div><div class="ds">Intake Documents</div></div>
+              <span class="dp">2 pp</span>
+              <div class="ra"><button class="ib"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/></svg></button><button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button></div>
+            </div>
+            <!-- Exhibit C – warning -->
+            <div class="doc-row warn-row">
+              <span class="drag"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="2" r="1.2"/><circle cx="7.5" cy="2" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="7.5" cy="12" r="1.2"/></svg></span>
+              <div class="div-lbl">DIV</div>
+              <div class="ex-badge" style="border-color:#fbbf24;color:#d97706;">C</div>
+              <div class="di"><div class="dn" style="color:var(--orange);">Pay Stubs 2022–2024</div><div class="ds" style="color:var(--orange);">⚠ 47 pages — typical range 3–6 pp</div></div>
+              <span class="dp" style="color:var(--orange);">47 pp</span>
+              <div class="ra"><button class="ib"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/></svg></button><button class="ib"><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></svg></button></div>
+            </div>
+            <div style="padding:5px 12px 4px;font-size:11px;color:var(--text-muted);">+ 40 more exhibits (D → AQ)</div>
+          </div>
+
+          <!-- NOT PLACED -->
+          <div class="sec-hd" onclick="toggle('np','nc')">
+            <div class="sec-label">
+              <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 7v4M10 14h.01"/></svg>
+              Not Placed
+            </div>
+            <div class="sec-ct">
+              <span class="np-badge">7 files</span>
+              <svg class="chev" id="nc" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 5l5 5-5 5"/></svg>
+            </div>
+          </div>
+          <div id="np" style="display:none;">
+            <div class="doc-row"><span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><div class="di"><div class="dn">I-94 Arrival Record</div><div class="ds">Intake Documents</div></div><button class="btn btn-ghost btn-sm" style="flex-shrink:0;">Add to Packet</button></div>
+            <div class="doc-row"><span class="fi"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><div class="di"><div class="dn">Degree Certificate – NUS</div><div class="ds">Intake Documents</div></div><button class="btn btn-ghost btn-sm" style="flex-shrink:0;">Add to Packet</button></div>
+            <div style="padding:4px 12px 5px;font-size:11px;color:var(--text-muted);">+ 5 more files</div>
+          </div>
+
+          <div class="add-row">
+            <button class="add-btn">
+              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 5v10M5 10h10"/></svg>
+              Add Document
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: FILE LIBRARY -->
+      <div class="panel">
+        <div class="panel-hd"><div class="panel-title">File Library</div><div class="panel-sub">All case files</div></div>
+        <div class="lib-search">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="5.5"/><path d="M13.5 13.5l3 3"/></svg>
+          <input placeholder="Search files…">
+        </div>
+        <div class="seg-ctrl">
+          <button class="seg-btn active" onclick="switchLib('all',this)">
+            <span class="seg-count">21</span> All
+          </button>
+          <button class="seg-btn" onclick="switchLib('placed',this)">
+            <span class="seg-count">13</span> Placed
+          </button>
+          <button class="seg-btn" onclick="switchLib('unplaced',this)">
+            <span class="seg-count">8</span> Unplaced
+          </button>
+        </div>
+        <div class="scrollable" style="flex:1;">
+          <div class="lib-sec">Questionnaire</div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">Passport_Marcus_Tan.pdf</span><span class="dot-p"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">I-94_Arrival_Record.pdf</span><span class="dot-u"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">Degree_Certificate_NUS.pdf</span><span class="dot-u"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">Pay_Stubs_2022_2024.pdf</span><span class="dot-p"></span></div>
+          <div class="lib-sec">Case Strategy</div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">IEEE_Publication_2023.pdf</span><span class="dot-p"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">Patent_US1234567.pdf</span><span class="dot-p"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">Conference_Talk_NeurIPS.pdf</span><span class="dot-p"></span></div>
+          <div class="lib-sec">Doc Gen</div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">Cover_Letter_v3.pdf</span><span class="dot-p"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">Supporting_Statement_v5.pdf</span><span class="dot-p"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">RecLetter_Dr_Chen.pdf</span><span class="dot-u"></span></div>
+          <div class="lib-sec">Forms</div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">G-28_signed.pdf</span><span class="dot-p"></span></div>
+          <div class="lf-row"><span class="lf-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14H5z"/></svg></span><span class="lf-name">I-129_O_Supplement.pdf</span><span class="dot-p"></span></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end content -->
+</div><!-- end main -->
+
+<!-- STICKY BOTTOM BAR — fixed to viewport bottom -->
+<div class="bottom-bar">
+
+  <!-- QA DRAWER — slides up above action bar -->
+  <div class="qa-drawer" id="qa-drawer">
+    <div class="qa-drawer-hd">
+      <div class="qa-summary">
+        QA Check Results
+        <span class="qa-tag red">1 blocker</span>
+        <span class="qa-tag yellow">2 warnings</span>
+        <span class="qa-tag green">7 passed</span>
+        <span style="font-size:11px;color:var(--text-muted);font-weight:400;">· checked just now</span>
+      </div>
+      <button class="ib" onclick="toggleQA()" style="width:28px;height:28px;">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+
+    <div class="qa-section-title">Rule-based checks · Instant — structural integrity</div>
+
+    <div class="qa-item"><div class="qdot g"></div><div class="qtext"><strong>All sources resolved</strong><div class="qd">5 of 6 references have files. LCA still pending upstream.</div></div></div>
+    <div class="qa-item"><div class="qdot g"></div><div class="qtext"><strong>Exhibit continuity</strong><div class="qd">Letters A–AQ sequential, no gaps.</div></div></div>
+    <div class="qa-item"><div class="qdot g"></div><div class="qtext"><strong>All files are PDFs</strong><div class="qd">43 files, all PDF/A compatible.</div></div></div>
+    <div class="qa-item"><div class="qdot g"></div><div class="qtext"><strong>No duplicates detected</strong><div class="qd">0 duplicate filenames or hashes.</div></div></div>
+    <div class="qa-item"><div class="qdot y"></div><div class="qtext"><strong>Page count anomaly — Exhibit C</strong><div class="qd">Pay Stubs is 47 pp. Typical: 3–6 pp.</div></div><button class="qover">Override</button></div>
+    <div class="qa-item"><div class="qdot y"></div><div class="qtext"><strong>7 case files not in packet</strong><div class="qd">I-94, Degree Certificate, and 5 others not included. Review Not Placed section.</div></div><button class="qover">Override</button></div>
+
+    <div class="qa-section-title" style="margin-top:4px;">AI-powered checks · Cross-references, form versions, anomalies</div>
+
+    <div class="qa-item"><div class="qdot g"></div><div class="qtext"><strong>Expected documents present</strong><div class="qd">Typical O-1A packets include cover letter, I-129, supporting statement, exhibits — all present.</div></div></div>
+    <div class="qa-item"><div class="qdot r"></div><div class="qtext"><strong>LCA Node not completed</strong><div class="qd">LCA Posting Notice has 0 files. Packet cannot be compiled until resolved.</div></div></div>
+
+    <div style="padding:10px 24px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border-light);">
+      QA re-runs automatically when you click Mark Ready for Review.
+    </div>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div class="action-bar">
+    <button class="btn btn-ghost">← Back to Overview</button>
+    <div style="flex:1;"></div>
+    <button class="btn-qa" onclick="toggleQA()">
+      <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l2 2 4-4"/><circle cx="10" cy="10" r="8"/></svg>
+      Run QA Check
+    </button>
+    <button class="btn btn-green" onclick="markReady()">Mark Ready for Review →</button>
+  </div>
+
+</div>
+
+<script>
+  function switchLib(tab, el) {
+    document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+  }
+  function toggle(secId, chevId) {
+    const s = document.getElementById(secId);
+    const c = document.getElementById(chevId);
+    const isOpen = s.style.display !== 'none';
+    s.style.display = isOpen ? 'none' : 'block';
+    c.classList.toggle('open', !isOpen);
+  }
+  function toggleQA() {
+    const d = document.getElementById('qa-drawer');
+    d.classList.toggle('open');
+  }
+  function markReady() {
+    const d = document.getElementById('qa-drawer');
+    d.classList.add('open');
+  }
+</script>
+</body>
+</html>

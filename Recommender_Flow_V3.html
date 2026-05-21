@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recommender Flow V3</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a1a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; gap: 48px; }
+
+  /* Nav */
+  .nav { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 40px; padding: 8px 12px; display: flex; gap: 4px; z-index: 100; }
+  .nav button { background: none; border: none; color: #888; font-size: 12px; padding: 6px 12px; border-radius: 20px; cursor: pointer; transition: all 0.15s; }
+  .nav button:hover { color: #fff; background: #3a3a3a; }
+  .nav button.active { color: #fff; background: #054d2a; }
+
+  /* Screen wrapper */
+  .screen { background: #f0f0ef; border-radius: 16px; overflow: hidden; width: 100%; max-width: 1180px; display: none; }
+  .screen.visible { display: block; }
+  .screen-label { text-align: center; color: #666; font-size: 13px; padding: 16px 0 4px; }
+  .screen-label span { color: #aaa; }
+
+  /* Chrome */
+  .chrome { background: #fff; border-bottom: 1px solid #e8e8e8; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+  .chrome-left { display: flex; align-items: center; gap: 12px; }
+  .chrome-back { color: #555; font-size: 18px; cursor: pointer; line-height: 1; }
+  .chrome-title { font-size: 15px; font-weight: 500; color: #111; }
+  .status-pill { background: #e8f5ee; color: #1a6636; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 20px; }
+  .saved { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+  .chrome-right { display: flex; align-items: center; gap: 10px; }
+  .btn-ghost { background: none; border: 1px solid #d8d8d8; color: #444; font-size: 13px; padding: 7px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-primary { background: #054d2a; color: #fff; font-size: 13px; font-weight: 500; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; }
+  .btn-primary-disabled { background: #d8d8d8; color: #aaa; font-size: 13px; font-weight: 500; padding: 8px 16px; border-radius: 8px; cursor: not-allowed; border: none; }
+
+  /* Sidebar icons */
+  .sidebar { position: absolute; right: 0; top: 0; bottom: 0; width: 56px; background: #fff; border-left: 1px solid #e8e8e8; display: flex; flex-direction: column; align-items: center; padding-top: 16px; gap: 20px; }
+  .sidebar-icon { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #aaa; font-size: 10px; cursor: pointer; }
+  .sidebar-icon svg { width: 18px; height: 18px; stroke: #aaa; fill: none; stroke-width: 1.5; }
+
+  /* Content area */
+  .content { padding: 24px; position: relative; }
+  .beneficiary-name { font-size: 20px; font-weight: 600; color: #111; margin-bottom: 4px; }
+  .beneficiary-meta { display: flex; align-items: center; gap: 8px; color: #888; font-size: 13px; margin-bottom: 24px; }
+  .meta-link { color: #555; display: flex; align-items: center; gap: 4px; font-size: 13px; }
+
+  /* Section */
+  .section { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .section-title { font-size: 16px; font-weight: 600; color: #111; }
+
+  /* Target counter */
+  .target-counter { display: flex; align-items: center; gap: 6px; background: #fff8ee; border: 1px solid #f0d080; border-radius: 20px; padding: 4px 10px; font-size: 12px; color: #a06000; cursor: pointer; }
+  .target-counter .dot { width: 6px; height: 6px; border-radius: 50%; background: #e49b45; }
+  .target-counter.green { background: #edfaf3; border-color: #86d8a8; color: #1a6636; }
+  .target-counter.green .dot { background: #2da862; }
+  .target-meta { color: #aaa; font-size: 12px; }
+  .header-spacer { flex: 1; }
+
+  /* Filter + add */
+  .filter-btn { background: #fff; border: 1px solid #e0e0e0; color: #555; font-size: 12px; padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .add-btn { background: #fff; border: 1px solid #054d2a; color: #054d2a; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+  /* Info banner */
+  .info-banner { background: #f5f3ff; border: 1px solid #d4c8f8; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; cursor: pointer; }
+  .info-banner-inner { display: flex; align-items: center; gap: 8px; }
+  .info-banner-icon { color: #6e56cf; font-size: 13px; }
+  .info-banner-text { font-size: 13px; color: #6e56cf; font-weight: 500; }
+  .info-banner-chevron { color: #aaa; font-size: 12px; }
+  .info-banner-expanded { background: #f5f3ff; border: 1px solid #d4c8f8; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .info-banner-expanded-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .info-banner-expanded ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .info-banner-expanded li { font-size: 13px; color: #444; line-height: 1.5; padding-left: 0; }
+  .info-banner-expanded li strong { color: #111; }
+  .edit-link { font-size: 12px; color: #6e56cf; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+  /* Onboarding banner */
+  .onboarding-banner { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px; }
+  .onboarding-icon { width: 32px; height: 32px; background: #f0eeff; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; }
+  .onboarding-text h4 { font-size: 13px; font-weight: 600; color: #111; margin-bottom: 4px; }
+  .onboarding-text p { font-size: 12px; color: #666; line-height: 1.5; }
+  .onboarding-text p strong { color: #111; }
+  .got-it { font-size: 12px; color: #aaa; cursor: pointer; white-space: nowrap; padding-top: 2px; }
+
+  /* Shortlisted banner */
+  .shortlist-banner { background: #fff8ee; border: 1px solid #f0d080; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .shortlist-banner .count { font-weight: 600; color: #a06000; }
+  .shortlist-banner-text { color: #7a5000; flex: 1; }
+
+  /* Declined replacement banner */
+  .declined-banner { background: #fff8f0; border: 1px solid #f5c880; border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+  .declined-banner-content { display: flex; align-items: flex-start; gap: 8px; }
+  .declined-banner-icon { color: #e49b45; font-size: 14px; margin-top: 1px; }
+  .declined-banner-text h5 { font-size: 12px; font-weight: 600; color: #8a5000; margin-bottom: 2px; }
+  .declined-banner-text p { font-size: 11px; color: #a06020; }
+  .btn-shortlist { background: #054d2a; color: #fff; font-size: 12px; font-weight: 500; padding: 7px 12px; border-radius: 7px; border: none; cursor: pointer; white-space: nowrap; }
+
+  /* Card grid */
+  .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .card-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+
+  /* Recommender card */
+  .rec-card { border: 1px solid #e8e8e8; border-radius: 10px; padding: 14px; cursor: pointer; transition: border-color 0.15s; background: #fff; }
+  .rec-card:hover { border-color: #bbb; }
+  .rec-card.confirmed { border-color: #2da862; border-width: 1.5px; }
+  .rec-card.declined { opacity: 0.7; }
+  .rec-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .rec-name { font-size: 13px; font-weight: 600; color: #111; flex: 1; }
+  .rec-name.muted { color: #999; }
+  .rec-icons { display: flex; align-items: center; gap: 6px; color: #aaa; font-size: 12px; }
+  .rec-icons a { color: #0077b5; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .rec-icons span { color: #aaa; font-size: 12px; cursor: pointer; }
+  .rec-title { font-size: 11px; color: #888; margin-bottom: 10px; line-height: 1.4; }
+  .rec-relationship { font-size: 12px; color: #555; margin: 10px 0 8px; line-height: 1.4; }
+  .nominate { font-size: 12px; color: #888; display: flex; align-items: center; gap: 4px; margin-top: 8px; }
+
+  /* Status badges */
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; padding: 4px 9px; border-radius: 20px; cursor: pointer; }
+  .badge svg { width: 11px; height: 11px; }
+  .badge-confirmed { background: #edfaf3; color: #1a6636; border: 1px solid #86d8a8; }
+  .badge-pending { background: #fff8ee; color: #a06000; border: 1px solid #f0d080; }
+  .badge-shortlisted { background: #f0f9f4; color: #054d2a; border: 1px solid #86c8a0; }
+  .badge-candidate { background: #f5f5f5; color: #666; border: 1px solid #e0e0e0; }
+  .badge-declined { background: #fff0f0; color: #c0392b; border: 1px solid #f5a8a8; }
+
+  /* Criteria pills */
+  .criteria-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .pill { font-size: 11px; padding: 3px 8px; border-radius: 12px; display: flex; align-items: center; gap: 4px; }
+  .pill-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .pill-green { background: #edfaf3; color: #1a6636; }
+  .pill-green .pill-dot { background: #2da862; }
+  .pill-orange { background: #fff8ee; color: #a06000; }
+  .pill-orange .pill-dot { background: #e49b45; }
+  .pill-red { background: #fff0f0; color: #c0392b; }
+  .pill-red .pill-dot { background: #e74c3c; }
+  .pill-more { background: #f0f0f0; color: #888; font-size: 11px; padding: 3px 8px; border-radius: 12px; }
+  .comment-count { font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 3px; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 48px 24px; border: 1.5px dashed #e0e0e0; border-radius: 10px; }
+  .empty-icon { font-size: 28px; color: #ccc; margin-bottom: 12px; }
+  .empty-title { font-size: 14px; font-weight: 500; color: #555; margin-bottom: 6px; }
+  .empty-desc { font-size: 12px; color: #aaa; margin-bottom: 20px; max-width: 300px; margin-left: auto; margin-right: auto; line-height: 1.5; }
+  .btn-empty { background: #054d2a; color: #fff; font-size: 13px; font-weight: 500; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+
+  /* Two-panel layout */
+  .two-panel { display: grid; grid-template-columns: 1fr 420px; gap: 0; }
+  .panel-left { padding: 20px; border-right: 1px solid #e8e8e8; }
+  .panel-right { background: #fff; padding: 20px; overflow-y: auto; max-height: 860px; }
+  .panel-right-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+  .panel-name { font-size: 16px; font-weight: 600; color: #111; display: flex; align-items: center; gap: 8px; }
+  .panel-subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+  .close-btn { color: #aaa; font-size: 18px; cursor: pointer; line-height: 1; }
+
+  /* Detail fields */
+  .field-label { font-size: 10px; font-weight: 600; color: #aaa; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; margin-top: 14px; }
+  .field-value { font-size: 13px; color: #333; line-height: 1.5; }
+  .field-hint { font-size: 11px; color: #bbb; font-style: italic; line-height: 1.5; }
+  .waiting-hint { font-size: 11px; color: #aaa; }
+  .criteria-covered { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .auto-derived { font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .add-criterion { font-size: 11px; color: #6e56cf; cursor: pointer; display: flex; align-items: center; gap: 3px; border: 1px dashed #d4c8f8; padding: 3px 8px; border-radius: 12px; }
+
+  /* Internal notes */
+  .internal-label { font-size: 10px; font-weight: 600; color: #e49b45; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; margin-top: 14px; }
+
+  /* Documents */
+  .doc-chip { display: inline-flex; align-items: center; gap: 5px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 6px; padding: 5px 10px; font-size: 12px; color: #555; margin-right: 6px; margin-top: 6px; cursor: pointer; }
+
+  /* Discussion */
+  .discussion-header { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; margin-bottom: 10px; padding-top: 14px; border-top: 1px solid #f0f0f0; }
+  .discussion-title { font-size: 12px; font-weight: 600; color: #555; display: flex; align-items: center; gap: 6px; }
+  .discussion-vis { font-size: 11px; color: #aaa; }
+  .comment { display: flex; gap: 10px; margin-bottom: 12px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .avatar-green { background: #edfaf3; color: #054d2a; }
+  .avatar-blue { background: #e8f0ff; color: #1a4aa0; }
+  .avatar-gray { background: #f0f0f0; color: #555; }
+  .comment-body { flex: 1; }
+  .comment-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .comment-name { font-size: 12px; font-weight: 500; color: #111; }
+  .comment-role { font-size: 10px; font-weight: 600; background: #e8f0ff; color: #1a4aa0; padding: 1px 6px; border-radius: 4px; }
+  .comment-role-you { background: #edfaf3; color: #054d2a; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+  .comment-date { font-size: 11px; color: #bbb; margin-left: auto; }
+  .comment-text { font-size: 12px; color: #444; line-height: 1.5; }
+  .reply-box { border: 1.5px solid #d4c8f8; border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+  .reply-box textarea { width: 100%; border: none; outline: none; font-size: 12px; color: #333; resize: none; height: 52px; font-family: inherit; background: transparent; }
+  .reply-box textarea::placeholder { color: #bbb; }
+  .reply-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .reply-tools { display: flex; gap: 8px; color: #bbb; font-size: 13px; cursor: pointer; }
+  .btn-post { background: #054d2a; color: #fff; font-size: 12px; font-weight: 500; padding: 6px 14px; border-radius: 7px; border: none; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .notes-hidden { font-size: 11px; color: #bbb; margin-top: 10px; }
+
+  /* Ask client btn */
+  .btn-ask-client { background: #054d2a; color: #fff; font-size: 13px; font-weight: 500; padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; width: 100%; justify-content: center; margin-top: 14px; }
+
+  /* Status dropdown */
+  .status-dropdown { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); padding: 6px; min-width: 180px; position: absolute; z-index: 10; top: 40px; left: 0; }
+  .dropdown-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; color: #333; transition: background 0.1s; }
+  .dropdown-item:hover { background: #f5f5f5; }
+  .dropdown-item .check { color: #054d2a; font-size: 12px; margin-left: auto; }
+  .dropdown-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dd-candidate { background: #ccc; }
+  .dd-shortlisted { background: #2da862; }
+  .dd-pending { background: #e49b45; }
+  .dd-confirmed { background: #2da862; }
+  .dd-declined { background: #e74c3c; }
+  .status-wrap { position: relative; display: inline-block; }
+
+  /* Target popover */
+  .target-popover { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); padding: 16px; width: 300px; position: absolute; top: 40px; left: 0; z-index: 10; }
+  .target-popover h4 { font-size: 13px; font-weight: 600; color: #111; margin-bottom: 4px; }
+  .target-popover p { font-size: 12px; color: #888; margin-bottom: 14px; line-height: 1.4; }
+  .target-numbers { display: flex; gap: 8px; margin-bottom: 10px; }
+  .num-btn { width: 36px; height: 36px; border-radius: 50%; border: 1px solid #e0e0e0; background: #fff; font-size: 14px; font-weight: 500; color: #555; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
+  .num-btn.active { background: #054d2a; color: #fff; border-color: #054d2a; }
+  .target-note { font-size: 11px; color: #bbb; font-style: italic; }
+
+  /* Screen sections padding fix */
+  .screen-pad { padding: 20px; }
+</style>
+</head>
+<body>
+
+<!-- SCREEN 1: Attorney overview -->
+<div class="screen visible" id="s1">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left">
+          <span class="chrome-back">←</span>
+          <span class="chrome-title">Case Strategy</span>
+          <span class="status-pill">In Progress</span>
+          <span class="saved">○ Saved</span>
+        </div>
+        <div class="chrome-right">
+          <button class="btn-ghost">👤 Client view</button>
+          <button class="btn-primary">Mark Reviewed</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="beneficiary-name">Dikembe Mutombo</div>
+        <div class="beneficiary-meta">
+          <span class="meta-link">Resume</span>
+          <span>•</span>
+          <span style="color:#0077b5;font-weight:700;font-size:14px">in</span>
+          <span>🎓</span>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter">
+              <span class="dot"></span>
+              2 of 5 confirmed ✏️
+            </div>
+            <span class="target-meta">· 6 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="filter-btn">⚡ All statuses ▾</button>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="info-banner">
+            <div class="info-banner-inner">
+              <span class="info-banner-icon">✦</span>
+              <span class="info-banner-text">What makes a good recommender?</span>
+            </div>
+            <span class="info-banner-chevron">▾</span>
+          </div>
+          <div class="card-grid">
+            <!-- Card 1: Confirmed -->
+            <div class="rec-card confirmed">
+              <div class="rec-card-header">
+                <span class="rec-name">Dr Sarah Chen</span>
+                <span style="font-size:11px;color:#aaa">☑️ ○ 4</span>
+                <div class="rec-icons"><a>in</a> <span>✉</span></div>
+              </div>
+              <div class="rec-title">Professor of Computer Science at Stanford University</div>
+              <span class="badge badge-confirmed">✓ Confirmed ▾</span>
+              <div class="rec-relationship">Validate original contributions and technical expertise</div>
+              <div class="criteria-pills">
+                <span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span>
+                <span class="pill pill-green"><span class="pill-dot"></span>Published Material</span>
+                <span class="pill-more">+1more</span>
+              </div>
+            </div>
+            <!-- Card 2: Confirmed -->
+            <div class="rec-card confirmed">
+              <div class="rec-card-header">
+                <span class="rec-name">Mark Johnson</span>
+                <span style="font-size:11px;color:#aaa">○ 2</span>
+                <div class="rec-icons"><a>in</a> <span>✉</span></div>
+              </div>
+              <div class="rec-title">Chief Technology Officer at Google Antigravity</div>
+              <span class="badge badge-confirmed">✓ Confirmed ▾</span>
+              <div class="rec-relationship">Confirm Critical Role and Leadership Impact</div>
+              <div class="criteria-pills">
+                <span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span>
+                <span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span>
+              </div>
+            </div>
+            <!-- Card 3: Confirmation Pending -->
+            <div class="rec-card">
+              <div class="rec-card-header">
+                <span class="rec-name">Prof. Michael Davis</span>
+                <span style="font-size:11px;color:#aaa">○ 3</span>
+                <div class="rec-icons"><a>in</a> <span>✉</span></div>
+              </div>
+              <div class="rec-title">Distinguished Professor at Indiana University Bloomington</div>
+              <span class="badge badge-pending">⊙ Confirmation Pending ▾</span>
+              <div class="rec-relationship">Support Scholarly Work and Research Significance</div>
+              <div class="criteria-pills">
+                <span class="pill pill-green"><span class="pill-dot"></span>Published Material</span>
+                <span class="pill pill-orange"><span class="pill-dot"></span>Judging</span>
+                <span class="pill-more">+1more</span>
+              </div>
+            </div>
+            <!-- Card 4: Shortlisted -->
+            <div class="rec-card">
+              <div class="rec-card-header">
+                <span class="rec-name">Aisha Patel</span>
+                <span style="font-size:11px;color:#aaa">○ 1</span>
+                <div class="rec-icons"><a>in</a> <span>✉</span></div>
+              </div>
+              <div class="rec-title">Director of AI Research at Meta FAIR</div>
+              <span class="badge badge-shortlisted">▪ Shortlisted ▾</span>
+              <div class="rec-relationship">Independent expert on industry impact and judging credentials</div>
+              <div class="criteria-pills">
+                <span class="pill pill-orange"><span class="pill-dot"></span>Judging</span>
+                <span class="pill pill-red"><span class="pill-dot"></span>Awards</span>
+              </div>
+            </div>
+            <!-- Card 5: Declined -->
+            <div class="rec-card declined">
+              <div class="rec-card-header">
+                <span class="rec-name muted">Robert Kim</span>
+                <span style="font-size:11px;color:#aaa">☑️ ○ 5</span>
+                <div class="rec-icons"><a>in</a> <span>✉</span></div>
+              </div>
+              <div class="rec-title" style="color:#bbb">Founder & CEO at Sequoia Innovations</div>
+              <span class="badge badge-declined">⊗ Declined ▾</span>
+              <div class="rec-relationship" style="color:#bbb">Investor relationship — speaks to commercial impact and adoption</div>
+              <div class="criteria-pills">
+                <span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span>
+              </div>
+              <div class="nominate">👤 Nominate replacement</div>
+            </div>
+            <!-- Card 6: Candidate -->
+            <div class="rec-card">
+              <div class="rec-card-header">
+                <span class="rec-name">Hiro Tanaka</span>
+                <div class="rec-icons"><a>in</a> <span>✉</span></div>
+              </div>
+              <div class="rec-title">Chief Scientist at Sony AI</div>
+              <span class="badge badge-candidate">👤 Candidate ▾</span>
+              <div class="rec-relationship">Independent expert from outside the US tech sphere</div>
+              <div class="criteria-pills">
+                <span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span>
+                <span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.1 · Attorney overview — status badges + soft target <span>1 / 9</span></div>
+</div>
+
+<!-- SCREEN 2: Info expanded -->
+<div class="screen" id="s2">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left">
+          <span class="chrome-back">←</span>
+          <span class="chrome-title">Case Strategy</span>
+          <span class="status-pill">In Progress</span>
+          <span class="saved">○ Saved</span>
+        </div>
+        <div class="chrome-right">
+          <button class="btn-ghost">👤 Client view</button>
+          <button class="btn-primary">Mark Reviewed</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter"><span class="dot"></span>2 of 5 confirmed ✏️</div>
+            <span class="target-meta">· 6 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="filter-btn">⚡ All statuses ▾</button>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="info-banner-expanded">
+            <div class="info-banner-expanded-header">
+              <div class="info-banner-inner">
+                <span class="info-banner-icon" style="color:#6e56cf">✦</span>
+                <span class="info-banner-text" style="color:#6e56cf;font-size:14px;font-weight:600">What makes a good recommender?</span>
+              </div>
+              <div class="edit-link">✏️ Edit for this case ▲</div>
+            </div>
+            <ul>
+              <li>• <strong>Mix collaborators with independents.</strong> USCIS weights independent expert recommenders more heavily, but collaborators speak to specific contributions better. Aim for ~60/40 independent.</li>
+              <li>• <strong>US-based preferred.</strong> Recommenders located in the US carry more weight than international ones for sustained-national-acclaim claims.</li>
+              <li>• <strong>Match recommender to criterion.</strong> A Fortune 500 CTO speaks to Critical Role credibly; an editor of a top journal speaks to Published Material. Avoid using the same person for everything.</li>
+              <li>• <strong>5–7 recommenders is typical</strong> for an O-1A; some cases need fewer. The target adjusts per case.</li>
+            </ul>
+          </div>
+          <div class="card-grid">
+            <div class="rec-card confirmed">
+              <div class="rec-card-header"><span class="rec-name">Dr Sarah Chen</span><span style="font-size:11px;color:#aaa">☑️ ○ 4</span><div class="rec-icons"><a>in</a><span>✉</span></div></div>
+              <div class="rec-title">Professor of Computer Science at Stanford University</div>
+              <span class="badge badge-confirmed">✓ Confirmed ▾</span>
+              <div class="rec-relationship">Validate original contributions and technical expertise</div>
+              <div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill-more">+1more</span></div>
+            </div>
+            <div class="rec-card confirmed">
+              <div class="rec-card-header"><span class="rec-name">Mark Johnson</span><span style="font-size:11px;color:#aaa">○ 2</span><div class="rec-icons"><a>in</a><span>✉</span></div></div>
+              <div class="rec-title">Chief Technology Officer at Google Antigravity</div>
+              <span class="badge badge-confirmed">✓ Confirmed ▾</span>
+              <div class="rec-relationship">Confirm Critical Role and Leadership Impact</div>
+              <div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span></div>
+            </div>
+            <div class="rec-card">
+              <div class="rec-card-header"><span class="rec-name">Prof. Michael Davis</span><span style="font-size:11px;color:#aaa">○ 3</span><div class="rec-icons"><a>in</a><span>✉</span></div></div>
+              <div class="rec-title">Distinguished Professor at Indiana University Bloomington</div>
+              <span class="badge badge-pending">⊙ Confirmation Pending ▾</span>
+              <div class="rec-relationship">Support Scholarly Work and Research Significance</div>
+              <div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill-more">+1more</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.2 · 'What makes a good recommender?' expanded <span>2 / 9</span></div>
+</div>
+
+<!-- SCREEN 3: Slide-out confirmed + thread -->
+<div class="screen" id="s3">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left"><span class="chrome-back">←</span><span class="chrome-title">Case Strategy</span><span class="status-pill">In Progress</span><span class="saved">○ Saved</span></div>
+        <div class="chrome-right"><button class="btn-ghost">👤 Client view</button><button class="btn-primary">Mark Reviewed</button></div>
+      </div>
+      <div class="two-panel">
+        <div class="panel-left">
+          <div class="section-header" style="margin-bottom:12px">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter"><span class="dot"></span>2 of 5 confirmed ✏️</div>
+            <span class="target-meta">· 6 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="filter-btn">All statuses ▾</button>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="card-grid-2" style="gap:10px">
+            <div class="rec-card confirmed" style="border-color:#054d2a;border-width:2px">
+              <div class="rec-card-header"><span class="rec-name">Dr Sarah Chen</span><span style="font-size:11px;color:#aaa">☑️ ○ 4</span><div class="rec-icons"><a>in</a><span>✉</span></div></div>
+              <div class="rec-title">Professor of Computer Science at Stanford University</div>
+              <span class="badge badge-confirmed">✓ Confirmed ▾</span>
+              <div class="rec-relationship">Validate original contributions and technical expertise</div>
+              <div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill-more">+1more</span></div>
+            </div>
+            <div class="rec-card confirmed">
+              <div class="rec-card-header"><span class="rec-name">Mark Johnson</span><span style="font-size:11px;color:#aaa">○ 2</span><div class="rec-icons"><a>in</a><span>✉</span></div></div>
+              <div class="rec-title">Chief Technology Officer at Google Antigravity</div>
+              <span class="badge badge-confirmed">✓ Confirmed ▾</span>
+              <div class="rec-relationship">Confirm Critical Role and Leadership Impact</div>
+              <div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span></div>
+            </div>
+            <div class="rec-card">
+              <div class="rec-card-header"><span class="rec-name">Prof. Michael Davis</span><span style="font-size:11px;color:#aaa">○ 3</span><div class="rec-icons"><a>in</a><span>✉</span></div></div>
+              <div class="rec-title">Distinguished Professor at Indiana University Bloomington</div>
+              <span class="badge badge-pending">⊙ Confirmation Pending ▾</span>
+              <div class="rec-relationship">Support Scholarly Work and Research Significance</div>
+              <div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span></div>
+            </div>
+            <div class="rec-card">
+              <div class="rec-card-header"><span class="rec-name">Aisha Patel</span><span style="font-size:11px;color:#aaa">○ 1</span><div class="rec-icons"><a>in</a><span>✉</span></div></div>
+              <div class="rec-title">Director of AI Research at Meta FAIR</div>
+              <span class="badge badge-shortlisted">▪ Shortlisted ▾</span>
+              <div class="rec-relationship">Independent expert on industry impact and judging credentials</div>
+              <div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel-right">
+          <div class="panel-right-header">
+            <div>
+              <div class="panel-name">Dr Sarah Chen <span style="color:#0077b5;font-weight:700">in</span> <span style="color:#aaa;font-size:13px">✉</span></div>
+              <div class="panel-subtitle">Professor of Computer Science at Stanford University</div>
+            </div>
+            <span class="close-btn">✕</span>
+          </div>
+          <div class="field-label">STATUS</div>
+          <span class="badge badge-confirmed">✓ Confirmed ▾</span>
+          <div class="field-label">RELATIONSHIP SUMMARY</div>
+          <div class="field-value">Validate original contributions and technical expertise</div>
+          <div class="field-label">PROFESSIONAL RELATIONSHIP — DETAIL</div>
+          <div class="field-value">Co-authored two papers on NLP transformer architectures (2021, 2023). Dr. Chen served as Dikembe's PhD advisor at Stanford and continues to collaborate on open-source AI infrastructure projects.</div>
+          <div class="field-label">CRITERIA COVERED</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="auto-derived">✦ auto-derived · click to override</span></div>
+          <div class="criteria-covered">
+            <span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span>
+            <span class="pill pill-green"><span class="pill-dot"></span>Published Material</span>
+            <span class="pill pill-orange"><span class="pill-dot"></span>Judging</span>
+            <span class="add-criterion">+ Add criterion</span>
+          </div>
+          <div class="internal-label">INTERNAL NOTES — ATTORNEY & PARALEGAL ONLY</div>
+          <div class="field-value">Sarah is very responsive — usually replies within 48 hours. Already received signed LOR draft on Mar 14.</div>
+          <div class="field-label">DOCUMENTS</div>
+          <div><span class="doc-chip">📄 Draft LOR — Sarah Chen.pdf</span><span class="doc-chip">📄 CV — Sarah Chen.pdf</span></div>
+          <div class="discussion-header">
+            <div class="discussion-title">○ DISCUSSION · 4</div>
+            <div class="discussion-vis">Visible to attorney & beneficiary</div>
+          </div>
+          <div class="comment">
+            <div class="avatar avatar-blue">AK</div>
+            <div class="comment-body">
+              <div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 12</span></div>
+              <div class="comment-text">Sarah's a strong fit — she's been your collaborator on the NLP papers and can speak to original contribution credibly. Suggest reaching out first.</div>
+            </div>
+          </div>
+          <div class="comment">
+            <div class="avatar avatar-gray">DM</div>
+            <div class="comment-body">
+              <div class="comment-meta"><span class="comment-name">Dikembe Mutombo</span><span class="comment-role-you">YOU</span><span class="comment-date">Mar 13</span></div>
+              <div class="comment-text">Sarah's great. I'll email her this week — we talked recently about a new transformer paper, so the timing's natural.</div>
+            </div>
+          </div>
+          <div class="comment">
+            <div class="avatar avatar-gray">DM</div>
+            <div class="comment-body">
+              <div class="comment-meta"><span class="comment-name">Dikembe Mutombo</span><span class="comment-role-you">YOU</span><span class="comment-date">Mar 14</span></div>
+              <div class="comment-text">She said yes — happy to write. I'll move the status.</div>
+            </div>
+          </div>
+          <div class="comment">
+            <div class="avatar avatar-blue">AK</div>
+            <div class="comment-body">
+              <div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 14</span></div>
+              <div class="comment-text">Excellent. I'll draft her LOR talking points by Friday.</div>
+            </div>
+          </div>
+          <div class="reply-box">
+            <textarea placeholder="Add a note for your client about this recommender…"></textarea>
+            <div class="reply-footer">
+              <div class="reply-tools"><span>@</span><span>📎</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.3 · Slide-out detail — Confirmed + comment thread <span>3 / 9</span></div>
+</div>
+
+<!-- SCREEN 4: Slide-out pending -->
+<div class="screen" id="s4">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left"><span class="chrome-back">←</span><span class="chrome-title">Case Strategy</span><span class="status-pill">In Progress</span><span class="saved">○ Saved</span></div>
+        <div class="chrome-right"><button class="btn-ghost">👤 Client view</button><button class="btn-primary">Mark Reviewed</button></div>
+      </div>
+      <div class="two-panel">
+        <div class="panel-left">
+          <div class="section-header" style="margin-bottom:12px">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter"><span class="dot"></span>2 of 5 confirmed ✏️</div>
+            <span class="target-meta">· 6 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="filter-btn">All statuses ▾</button>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="card-grid-2" style="gap:10px">
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Dr Sarah Chen</span><span style="font-size:11px;color:#aaa">☑️ ○ 4</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Professor of Computer Science at Stanford University</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Validate original contributions and technical expertise</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill-more">+1more</span></div></div>
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Mark Johnson</span><span style="font-size:11px;color:#aaa">○ 2</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Chief Technology Officer at Google Antigravity</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Confirm Critical Role and Leadership Impact</div><div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span></div></div>
+            <div class="rec-card" style="border-color:#054d2a;border-width:2px"><div class="rec-card-header"><span class="rec-name">Prof. Michael Davis</span><span style="font-size:11px;color:#aaa">○ 3</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Distinguished Professor at Indiana University Bloomington</div><span class="badge badge-pending">⊙ Confirmation Pending ▾</span><div class="rec-relationship">Support Scholarly Work and Research Significance</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span></div></div>
+            <div class="rec-card"><div class="rec-card-header"><span class="rec-name">Aisha Patel</span><span style="font-size:11px;color:#aaa">○ 1</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Director of AI Research at Meta FAIR</div><span class="badge badge-shortlisted">▪ Shortlisted ▾</span><div class="rec-relationship">Independent expert on industry impact and judging credentials</div><div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span></div></div>
+          </div>
+        </div>
+        <div class="panel-right">
+          <div class="panel-right-header">
+            <div><div class="panel-name">Prof. Michael Davis <span style="color:#0077b5;font-weight:700">in</span> <span style="color:#aaa;font-size:13px">✉</span></div><div class="panel-subtitle">Distinguished Professor at Indiana University Bloomington</div></div>
+            <span class="close-btn">✕</span>
+          </div>
+          <div class="field-label">STATUS</div>
+          <div style="display:flex;align-items:center;gap:8px"><span class="badge badge-pending">⊙ Confirmation Pending ▾</span><span class="waiting-hint">Waiting for client to confirm</span></div>
+          <div class="field-label">RELATIONSHIP SUMMARY</div>
+          <div class="field-value">Support Scholarly Work and Research Significance</div>
+          <div class="field-label">PROFESSIONAL RELATIONSHIP — DETAIL</div>
+          <div class="field-value">Independent expert — co-chaired the program committee for ACL 2022 where Dikembe presented keynote work.</div>
+          <div class="field-label">CRITERIA COVERED</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="auto-derived">✦ auto-derived · click to override</span></div>
+          <div class="criteria-covered"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span><span class="add-criterion">+ Add criterion</span></div>
+          <div class="internal-label">INTERNAL NOTES — ATTORNEY & PARALEGAL ONLY</div>
+          <div class="field-hint">Add internal notes about this recommender (responsiveness, prior LORs they've written, conflicts to flag, etc.)</div>
+          <div class="discussion-header">
+            <div class="discussion-title">○ DISCUSSION · 3</div>
+            <div class="discussion-vis">Visible to attorney & beneficiary</div>
+          </div>
+          <div class="comment"><div class="avatar avatar-blue">AK</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 18</span></div><div class="comment-text">Davis is an independent expert from a different lab — useful balance to Sarah, who's a direct collaborator. Worth reaching out.</div></div></div>
+          <div class="comment"><div class="avatar avatar-gray">DM</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Dikembe Mutombo</span><span class="comment-role-you">YOU</span><span class="comment-date">Mar 19</span></div><div class="comment-text">He's busy this quarter — I emailed him but no reply yet.</div></div></div>
+          <div class="comment"><div class="avatar avatar-blue">AK</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 20</span></div><div class="comment-text">Give it another week, then we'll consider Aisha Patel from Meta as a backup independent.</div></div></div>
+          <div class="reply-box">
+            <textarea placeholder="Add a note for your client about this recommender…"></textarea>
+            <div class="reply-footer"><div class="reply-tools"><span>@</span><span>📎</span></div><button class="btn-post">Post comment ➤</button></div>
+          </div>
+          <div class="notes-hidden">Notes are hidden from the client. Discussion is shared.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.4 · Slide-out detail — Pending (waiting for client) <span>4 / 9</span></div>
+</div>
+
+<!-- SCREEN 5: Status dropdown -->
+<div class="screen" id="s5">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left"><span class="chrome-back">←</span><span class="chrome-title">Case Strategy</span><span class="status-pill">In Progress</span><span class="saved">○ Saved</span></div>
+        <div class="chrome-right"><button class="btn-ghost">👤 Client view</button><button class="btn-primary">Mark Reviewed</button></div>
+      </div>
+      <div class="two-panel">
+        <div class="panel-left">
+          <div class="section-header" style="margin-bottom:12px">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter"><span class="dot"></span>2 of 5 confirmed ✏️</div>
+            <span class="target-meta">· 6 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="filter-btn">All statuses ▾</button>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="card-grid-2" style="gap:10px">
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Dr Sarah Chen</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Professor of Computer Science at Stanford University</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Validate original contributions and technical expertise</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span></div></div>
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Mark Johnson</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">CTO at Google Antigravity</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Confirm Critical Role and Leadership Impact</div><div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span></div></div>
+            <div class="rec-card"><div class="rec-card-header"><span class="rec-name">Prof. Michael Davis</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Distinguished Professor at Indiana University</div><span class="badge badge-pending">⊙ Confirmation Pending ▾</span><div class="rec-relationship">Support Scholarly Work and Research Significance</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span></div></div>
+            <div class="rec-card" style="border-color:#054d2a;border-width:2px"><div class="rec-card-header"><span class="rec-name">Aisha Patel</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Director of AI Research at Meta FAIR</div><span class="badge badge-shortlisted">▪ Shortlisted ▾</span><div class="rec-relationship">Independent expert on industry impact and judging credentials</div><div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span></div></div>
+          </div>
+        </div>
+        <div class="panel-right">
+          <div class="panel-right-header"><div><div class="panel-name">Aisha Patel <span style="color:#0077b5;font-weight:700">in</span> <span style="color:#aaa;font-size:13px">✉</span></div><div class="panel-subtitle">Director of AI Research at Meta FAIR</div></div><span class="close-btn">✕</span></div>
+          <div class="field-label">STATUS</div>
+          <div class="status-wrap">
+            <span class="badge badge-shortlisted">▪ Shortlisted ▾</span>
+            <div class="status-dropdown">
+              <div class="dropdown-item"><span class="dropdown-dot dd-candidate"></span>Candidate</div>
+              <div class="dropdown-item"><span class="dropdown-dot dd-shortlisted"></span>Shortlisted <span class="check">✓</span></div>
+              <div class="dropdown-item"><span class="dropdown-dot dd-pending"></span>Confirmation Pending</div>
+              <div class="dropdown-item"><span class="dropdown-dot dd-confirmed"></span>Confirmed</div>
+              <div class="dropdown-item"><span class="dropdown-dot dd-declined"></span>Declined</div>
+            </div>
+          </div>
+          <div class="field-label">RELATIONSHIP SUMMARY</div>
+          <div class="field-value">Independent expert on industry impact and judging credentials</div>
+          <div class="field-label">PROFESSIONAL RELATIONSHIP — DETAIL</div>
+          <div class="field-value">First met at NeurIPS 2021. Has published on foundational patent in her own work in RL infrastructure.</div>
+          <div class="field-label">CRITERIA COVERED</div>
+          <div class="criteria-covered"><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span><span class="add-criterion">+ Add criterion</span></div>
+          <div class="internal-label">INTERNAL NOTES — ATTORNEY & PARALEGAL ONLY</div>
+          <div class="field-hint">Add internal notes about this recommender (responsiveness, prior LORs they've written, conflicts to flag, etc.)</div>
+          <div class="discussion-header"><div class="discussion-title">○ DISCUSSION · 1</div><div class="discussion-vis">Visible to attorney & beneficiary</div></div>
+          <div class="comment"><div class="avatar avatar-blue">AK</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 21</span></div><div class="comment-text">Aisha brings independent expert weight — adding her as a Shortlist candidate. Wait on Davis's reply first; if he passes, Aisha moves to Pending.</div></div></div>
+          <div class="reply-box"><textarea placeholder="Add a note for your client about this recommender…"></textarea><div class="reply-footer"><div class="reply-tools"><span>@</span><span>📎</span></div><button class="btn-post">Post comment ➤</button></div></div>
+          <button class="btn-ask-client">✉ Ask client to reach out</button>
+          <div class="notes-hidden">Notes are hidden from the client. Discussion is shared.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.5 · Status dropdown open in slide-out <span>5 / 9</span></div>
+</div>
+
+<!-- SCREEN 6: Soft target editor -->
+<div class="screen" id="s6">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left"><span class="chrome-back">←</span><span class="chrome-title">Case Strategy</span><span class="status-pill">In Progress</span><span class="saved">○ Saved</span></div>
+        <div class="chrome-right"><button class="btn-ghost">👤 Client view</button><button class="btn-primary">Mark Reviewed</button></div>
+      </div>
+      <div class="content">
+        <div class="section">
+          <div class="section-header" style="position:relative">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter" style="position:relative">
+              <span class="dot"></span>2 of 5 confirmed ✏️
+              <div class="target-popover">
+                <h4>Target confirmed letters</h4>
+                <p>Soft target shown to your client. Most O-1A cases need 5–7; some specialized cases need fewer.</p>
+                <div class="target-numbers">
+                  <button class="num-btn">3</button>
+                  <button class="num-btn">4</button>
+                  <button class="num-btn active">5</button>
+                  <button class="num-btn">6</button>
+                  <button class="num-btn">7</button>
+                </div>
+                <div class="target-note">No hard cap — you can confirm more or fewer than the target.</div>
+              </div>
+            </div>
+            <span class="target-meta">· 6 on the case</span>
+          </div>
+          <div class="card-grid">
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Dr Sarah Chen</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Professor of Computer Science at Stanford University</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Validate original contributions and technical expertise</div></div>
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Mark Johnson</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">CTO at Google Antigravity</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Confirm Critical Role and Leadership Impact</div></div>
+            <div class="rec-card"><div class="rec-card-header"><span class="rec-name">Prof. Michael Davis</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Distinguished Professor at Indiana University</div><span class="badge badge-pending">⊙ Confirmation Pending ▾</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.6 · Soft target editor <span>6 / 9</span></div>
+</div>
+
+<!-- SCREEN 7: Client first-visit empty state -->
+<div class="screen" id="s7">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left"><span class="chrome-back">←</span><span class="chrome-title">Case Strategy</span><span class="status-pill">In Progress</span><span class="saved">○ Saved</span></div>
+        <div class="chrome-right"><button class="btn-primary-disabled">Submit to Attorney</button></div>
+      </div>
+      <div class="content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter"><span class="dot"></span>0 of 5 confirmed</div>
+            <span class="target-meta">· 0 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="onboarding-banner">
+            <div class="onboarding-icon">💡</div>
+            <div class="onboarding-text" style="flex:1">
+              <h4>Before you add anyone — how this works</h4>
+              <p>Add anyone you think could write a strong letter. Your attorney reviews each one, shortlists the right mix for your case, and tells you who to reach out to.<br><strong>Adding someone doesn't mean they'll be asked.</strong> When your attorney shortlists someone, you'll get a clear list of who to contact and how — and you can track replies right on each card.</p>
+            </div>
+            <span class="got-it">Got it</span>
+          </div>
+          <div class="info-banner">
+            <div class="info-banner-inner"><span class="info-banner-icon">✦</span><span class="info-banner-text">What makes a good recommender?</span></div>
+            <span class="info-banner-chevron">▾</span>
+          </div>
+          <div class="empty-state">
+            <div class="empty-icon">👤</div>
+            <div class="empty-title">No recommenders added yet</div>
+            <div class="empty-desc">Add anyone you think could speak to your work — professors, managers, investors, collaborators. Your attorney will curate the right mix from your list.</div>
+            <button class="btn-empty">+ Add your first recommender</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.7 · Client first-visit — explainer + empty state <span>7 / 9</span></div>
+</div>
+
+<!-- SCREEN 8: Client view shortlisted -->
+<div class="screen" id="s8">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left"><span class="chrome-back">←</span><span class="chrome-title">Case Strategy</span><span class="status-pill">In Progress</span><span class="saved">○ Saved</span></div>
+        <div class="chrome-right"><button class="btn-primary-disabled">Submit to Attorney</button></div>
+      </div>
+      <div class="two-panel">
+        <div class="panel-left">
+          <div class="section-header" style="margin-bottom:12px">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter"><span class="dot"></span>2 of 5 confirmed</div>
+            <span class="target-meta">· 6 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="shortlist-banner">
+            <span>✉</span>
+            <span class="shortlist-banner-text">Your attorney shortlisted <span class="count">4 recommenders</span> · please reach out to anyone in "Confirmation Pending" and update their status here when they reply.</span>
+          </div>
+          <div class="card-grid-2" style="gap:10px">
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Dr Sarah Chen</span><span style="font-size:11px;color:#aaa">○ 4</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Professor of Computer Science at Stanford University</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Validate original contributions and technical expertise</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill-more">+1more</span></div></div>
+            <div class="rec-card confirmed"><div class="rec-card-header"><span class="rec-name">Mark Johnson</span><span style="font-size:11px;color:#aaa">○ 2</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">CTO at Google Antigravity</div><span class="badge badge-confirmed">✓ Confirmed ▾</span><div class="rec-relationship">Confirm Critical Role and Leadership Impact</div><div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span></div></div>
+            <div class="rec-card" style="border-color:#054d2a;border-width:2px"><div class="rec-card-header"><span class="rec-name">Prof. Michael Davis</span><span style="font-size:11px;color:#aaa">○ 3</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Distinguished Professor at Indiana University</div><span class="badge badge-pending">⊙ Confirmation Pending ▾</span><div class="rec-relationship">Support Scholarly Work and Research Significance</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill-more">+1more</span></div></div>
+            <div class="rec-card"><div class="rec-card-header"><span class="rec-name">Aisha Patel</span><span style="font-size:11px;color:#aaa">○ 1</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Director of AI Research at Meta FAIR</div><span class="badge badge-shortlisted">▪ Shortlisted ▾</span><div class="rec-relationship">Independent expert on industry impact and judging credentials</div><div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span></div></div>
+          </div>
+        </div>
+        <div class="panel-right">
+          <div class="panel-right-header"><div><div class="panel-name">Prof. Michael Davis <span style="color:#0077b5;font-weight:700">in</span> <span style="color:#aaa;font-size:13px">✉</span></div><div class="panel-subtitle">Distinguished Professor at Indiana University Bloomington</div></div><span class="close-btn">✕</span></div>
+          <div class="field-label">STATUS</div>
+          <div style="display:flex;align-items:center;gap:8px"><span class="badge badge-pending">⊙ Confirmation Pending ▾</span><span class="waiting-hint">Tell us when they reply</span></div>
+          <div class="field-label">RELATIONSHIP SUMMARY</div>
+          <div class="field-value">Support Scholarly Work and Research Significance</div>
+          <div class="field-label">PROFESSIONAL RELATIONSHIP — DETAIL</div>
+          <div class="field-value">Independent expert — co-chaired the program committee for ACL 2022 where Dikembe presented keynote work.</div>
+          <div class="field-label">CRITERIA COVERED</div>
+          <div class="criteria-covered"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span></div>
+          <div class="discussion-header"><div class="discussion-title">○ DISCUSSION · 3</div><div class="discussion-vis">Visible to attorney & beneficiary</div></div>
+          <div class="comment"><div class="avatar avatar-blue">AK</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 18</span></div><div class="comment-text">Davis is an independent expert from a different lab — useful balance to Sarah, who's a direct collaborator. Worth reaching out.</div></div></div>
+          <div class="comment"><div class="avatar avatar-gray">DM</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Dikembe Mutombo</span><span class="comment-role-you">YOU</span><span class="comment-date">Mar 19</span></div><div class="comment-text">He's busy this quarter — I emailed him but no reply yet.</div></div></div>
+          <div class="comment"><div class="avatar avatar-blue">AK</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 20</span></div><div class="comment-text">Give it another week, then we'll consider Aisha Patel from Meta as a backup independent.</div></div></div>
+          <div class="reply-box"><textarea placeholder="Reply to your attorney…"></textarea><div class="reply-footer"><div class="reply-tools"><span>@</span><span>📎</span></div><button class="btn-post">Post comment ➤</button></div></div>
+          <div class="notes-hidden">Your attorney sees everything you post here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.8 · Client view — shortlisted, update statuses <span>8 / 9</span></div>
+</div>
+
+<!-- SCREEN 9: Declined → nominate replacement -->
+<div class="screen" id="s9">
+  <div class="screen-pad" style="background:#f0f0ef">
+    <div style="background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="chrome">
+        <div class="chrome-left"><span class="chrome-back">←</span><span class="chrome-title">Case Strategy</span><span class="status-pill">In Progress</span><span class="saved">○ Saved</span></div>
+        <div class="chrome-right"><button class="btn-ghost">👤 Client view</button><button class="btn-primary">Mark Reviewed</button></div>
+      </div>
+      <div class="two-panel">
+        <div class="panel-left">
+          <div class="section-header" style="margin-bottom:12px">
+            <span class="section-title">Recommenders</span>
+            <div class="target-counter"><span class="dot"></span>2 of 5 confirmed ✏️</div>
+            <span class="target-meta">· 6 on the case</span>
+            <div class="header-spacer"></div>
+            <button class="filter-btn">All statuses ▾</button>
+            <button class="add-btn">+ Add Recommender</button>
+          </div>
+          <div class="card-grid-2" style="gap:10px">
+            <div class="rec-card"><div class="rec-card-header"><span class="rec-name">Prof. Michael Davis</span><span style="font-size:11px;color:#aaa">○ 3</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Distinguished Professor at Indiana University</div><span class="badge badge-pending">⊙ Confirmation Pending ▾</span><div class="rec-relationship">Support Scholarly Work and Research Significance</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Published Material</span><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill-more">+1more</span></div></div>
+            <div class="rec-card"><div class="rec-card-header"><span class="rec-name">Aisha Patel</span><span style="font-size:11px;color:#aaa">○ 1</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Director of AI Research at Meta FAIR</div><span class="badge badge-shortlisted">▪ Shortlisted ▾</span><div class="rec-relationship">Independent expert on industry impact and judging credentials</div><div class="criteria-pills"><span class="pill pill-orange"><span class="pill-dot"></span>Judging</span><span class="pill pill-red"><span class="pill-dot"></span>Awards</span></div></div>
+            <div class="rec-card declined" style="border-color:#f5a8a8;border-width:1.5px"><div class="rec-card-header"><span class="rec-name muted">Robert Kim</span><span style="font-size:11px;color:#aaa">☑️ ○ 5</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title" style="color:#bbb">Founder & CEO at Sequoia Innovations</div><span class="badge badge-declined">⊗ Declined ▾</span><div class="rec-relationship" style="color:#bbb">Investor relationship — speaks to commercial impact and adoption</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span></div><div class="nominate">👤 Nominate replacement</div></div>
+            <div class="rec-card"><div class="rec-card-header"><span class="rec-name">Hiro Tanaka</span><div class="rec-icons"><a>in</a><span>✉</span></div></div><div class="rec-title">Chief Scientist at Sony AI</div><span class="badge badge-candidate">👤 Candidate ▾</span><div class="rec-relationship">Independent expert from outside the US tech sphere</div><div class="criteria-pills"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span><span class="pill pill-orange"><span class="pill-dot"></span>Critical Role</span></div></div>
+          </div>
+          <div class="declined-banner">
+            <div class="declined-banner-content">
+              <span class="declined-banner-icon">💡</span>
+              <div class="declined-banner-text">
+                <h5>Robert Kim declined — need a replacement for "Original Contribution"</h5>
+                <p>Hiro Tanaka (Sony AI) is your strongest remaining candidate covering the same criterion. Shortlist him?</p>
+              </div>
+            </div>
+            <button class="btn-shortlist">▪ Shortlist Hiro</button>
+          </div>
+        </div>
+        <div class="panel-right">
+          <div class="panel-right-header"><div><div class="panel-name">Robert Kim <span style="color:#0077b5;font-weight:700">in</span> <span style="color:#aaa;font-size:13px">✉</span></div><div class="panel-subtitle">Founder & CEO at Sequoia Innovations</div></div><span class="close-btn">✕</span></div>
+          <div class="field-label">STATUS</div>
+          <span class="badge badge-declined">⊗ Declined ▾</span>
+          <div class="field-label">RELATIONSHIP SUMMARY</div>
+          <div class="field-value">Investor relationship — speaks to commercial impact and adoption</div>
+          <div class="field-label">PROFESSIONAL RELATIONSHIP — DETAIL</div>
+          <div class="field-value">Led Series B investment in 2022. Has direct knowledge of Dikembe's technical roadmap and IP portfolio.</div>
+          <div class="field-label">CRITERIA COVERED</div>
+          <div class="criteria-covered"><span class="pill pill-green"><span class="pill-dot"></span>Original Contribution</span><span class="add-criterion">+ Add criterion</span></div>
+          <div class="internal-label">INTERNAL NOTES — ATTORNEY & PARALEGAL ONLY</div>
+          <div class="field-value">Confirmed willing to sign — waiting on final draft from Abhinav.</div>
+          <div class="field-label">DOCUMENTS</div>
+          <div><span class="doc-chip">📄 Investment Memo.pdf</span></div>
+          <div class="discussion-header"><div class="discussion-title">○ DISCUSSION · 3</div><div class="discussion-vis">Visible to attorney & beneficiary</div></div>
+          <div class="comment"><div class="avatar avatar-blue">AK</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 18</span></div><div class="comment-text">Robert is an investor — speaks to commercial impact. Strong addition.</div></div></div>
+          <div class="comment"><div class="avatar avatar-gray">DM</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Dikembe Mutombo</span><span class="comment-role-you">YOU</span><span class="comment-date">Mar 22</span></div><div class="comment-text">Robert declined — he said he's not comfortable writing a US immigration letter as a non-US person.</div></div></div>
+          <div class="comment"><div class="avatar avatar-blue">AK</div><div class="comment-body"><div class="comment-meta"><span class="comment-name">Abhinav Kumar</span><span class="comment-role">ATTORNEY</span><span class="comment-date">Mar 22</span></div><div class="comment-text">No worries. I'll mark him Declined and we'll nominate a US-based investor as replacement. Looking at our other candidates now.</div></div></div>
+          <div class="reply-box"><textarea placeholder="Add a note for your client about this recommender…"></textarea><div class="reply-footer"><div class="reply-tools"><span>@</span><span>📎</span></div><button class="btn-post">Post comment ➤</button></div></div>
+          <div class="notes-hidden">Notes are hidden from the client. Discussion is shared.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">4.9 · Declined → nominate replacement <span>9 / 9</span></div>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button class="active" onclick="show(1)">4.1</button>
+  <button onclick="show(2)">4.2</button>
+  <button onclick="show(3)">4.3</button>
+  <button onclick="show(4)">4.4</button>
+  <button onclick="show(5)">4.5</button>
+  <button onclick="show(6)">4.6</button>
+  <button onclick="show(7)">4.7</button>
+  <button onclick="show(8)">4.8</button>
+  <button onclick="show(9)">4.9</button>
+</div>
+
+<script>
+function show(n) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+  document.getElementById('s'+n).classList.add('visible');
+  document.querySelectorAll('.nav button').forEach((b,i) => b.classList.toggle('active', i===n-1));
+  window.scrollTo(0,0);
+}
+</script>
+</body>
+</html>
